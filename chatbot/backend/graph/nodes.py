@@ -3,8 +3,8 @@ from langchain_core.messages import HumanMessage
 from langchain_classic.schema import Document
 from langchain_tavily import TavilySearch
 from chatbot.backend.rag.retriever import get_retriever
-from chatbot.backend.graph.chains import retrieval_grader, answer_chain, hallucination_grader, answer_grader, question_router
-from chatbot.backend.config import MAX_RETRIES, WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE
+from chatbot.backend.graph.chains import retrieval_grader, answer_chain, hallucination_grader, answer_grader, question_router, web_results_grader
+from chatbot.backend.config import MAX_RETRIES, WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, MIN_DOCS_FOR_GENERATION
 
 load_dotenv()
 
@@ -84,7 +84,8 @@ def grade_documents(state):
     question = state["question"]
     history = _format_history(state.get("history", []))
     filtered_docs = []
-
+    needs_web_search = False
+    
     for doc in state["documents"]:
         if _validate_relevance(question, history, doc):
             print("Document relevant")
@@ -92,7 +93,9 @@ def grade_documents(state):
         else:
             print("Document not relevant")
 
-    needs_web_search = len(filtered_docs) == 0
+    if len(filtered_docs) < MIN_DOCS_FOR_GENERATION:
+        needs_web_search = True
+
     return {"documents": filtered_docs, "question": question, "is_web_search": needs_web_search}
 
 
@@ -110,6 +113,18 @@ def web_search(state):
     documents.extend(web_docs)
     return {"documents": documents, "question": state["question"]}
 
+
+def grade_web_results(state):
+    print("Grading web results")
+    topic_docs = [
+        doc for doc in state["documents"]
+        if doc.metadata.get("source") == "web_search"
+        and web_results_grader.invoke({"document": _format_context([doc])})["in_domain"] == "yes"
+    ]
+
+    is_off_topic = len(topic_docs) == 0
+    print(f"Web results in domain: {not is_off_topic}")
+    return {**state, "is_off_topic": is_off_topic}
 
 def generate(state):
     print("Generating answer")
@@ -140,9 +155,18 @@ def route_method(state):
     if state["is_web_search"]:
         print("Decision: web search")
         return "websearch"
+    
     print("Decision: generate")
     return "generate"
 
+def route_web_results(state):
+    print("Routing web results")
+    if state["is_off_topic"]:
+        print("Decision: off topic")
+        return "off_topic"
+    
+    print("Decision: generate")
+    return "generate"
 
 def route_generation(state):
     print("Grading generation")

@@ -1,6 +1,6 @@
 from langgraph.graph import END, StateGraph
 from chatbot.backend.graph.state import GraphState
-from chatbot.backend.graph.nodes import (route_question, retrieve, grade_documents, web_search, generate, generate_off_topic, route_method, route_generation)
+from chatbot.backend.graph.nodes import (route_question, retrieve, grade_documents, web_search, generate, generate_off_topic, route_method, route_generation, grade_web_results, route_web_results)
 
 def build_graph():
     graph = StateGraph(GraphState)
@@ -8,6 +8,7 @@ def build_graph():
     graph.add_node("retrieve", retrieve)
     graph.add_node("grade_documents", grade_documents)
     graph.add_node("web_search", web_search)
+    graph.add_node("grade_web_results", grade_web_results)
     graph.add_node("generate", generate)
     graph.add_node("generate_off_topic", generate_off_topic)
 
@@ -27,7 +28,15 @@ def build_graph():
             "generate": "generate"
         }
     )
-    graph.add_edge("web_search", "generate")
+    graph.add_edge("web_search", "grade_web_results")
+    graph.add_conditional_edges(
+        "grade_web_results",
+        route_web_results,
+        {
+            "off_topic": "generate_off_topic",
+            "generate": "generate"
+        }
+    )
     graph.add_edge("generate_off_topic", END)
     graph.add_conditional_edges(
         "generate",

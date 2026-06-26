@@ -14,10 +14,13 @@ LLM_MODEL = "llama3"
 MAX_RETRIES = 3
 
 # Retriever
-RETRIEVER_K = 4
+RETRIEVER_K = 6
 
 # Web search
-WEB_SEARCH_MAX_RESULTS = 5
+WEB_SEARCH_MAX_RESULTS = 3
+
+# Necessary relevant docs
+MIN_DOCS_FOR_GENERATION = 2
 
 # Off-topic response
 OFF_TOPIC_RESPONSE = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."

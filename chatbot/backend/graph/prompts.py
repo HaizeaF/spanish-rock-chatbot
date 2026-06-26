@@ -10,9 +10,21 @@ You are filtering erroneous retrievals. The document does NOT need to fully answ
 </task>
 
 <rules>
+Return "no" if ANY of the following occurs:
+- The document does not explicitly mention the same entity (band, artist, album, song) as the question.
+- The document only contains indirect or thematic relationships (e.g. same genre, same country, similar artist).
+- The document requires inference to connect it to the question.
+- The document does not contain any direct factual relation to the question entity.
+
+Return "yes" ONLY if ALL of the following are true:
+- The document explicitly mentions the same entity as the question OR contains a direct factual statement about it.
+- The relationship between question and document is explicitly stated in the text.
+- No inference is required to establish relevance.
+
+- Do NOT correct, reinterpret, or modify the user's question.
+- Do NOT replace or substitute entities mentioned by the user, even if they look incorrect or similar to known bands or artists.
+- Do NOT merge information from different entities or documents unless explicitly stated.
 - Base your decision ONLY on the content of the document, NEVER on assumptions.
-- A document is relevant if it contains ANY related keyword, name, concept or semantic content.
-- Do NOT require the document to fully answer the question.
 - Return ONLY JSON. No explanations. No extra text.
 - Return a JSON with a single key "relevant" and a string value "yes" or "no".
 - Return "yes" if the document is relevant, "no" if it is not.
@@ -50,7 +62,7 @@ Source: https://es.wikipedia.org/wiki/Mammalia
 Answer:
 """
 
-RAG_PROMPT = """
+ANSWER_PROMPT = """
 <role>
 You are an expert assistant specialized EXCLUSIVELY in Spanish rock music.
 You answer questions about Spanish rock bands, artists, albums, concerts and music history.
@@ -61,6 +73,19 @@ Answer the user question based on the provided context and conversation history.
 </task>
 
 <rules>
+Answer with fallback (JUST the fallback, no extra text) if ANY of the following occurs:
+- The exact entity in the question does NOT appear in the context.
+- The question contains a band, artist, album or song name that is NOT explicitly present in the context.
+- The answer would require correcting, normalizing, or interpreting the entity name in the question.
+- The answer would require substituting the queried entity with a similar or known entity.
+- The context does not explicitly contain enough information about the exact entity asked.
+
+Answer normally if ALL of the following occurs:
+- The exact entity in the question appears explicitly in the context.
+- All facts used in the answer are explicitly stated in the context.
+- No entity substitution, correction, or normalization is performed.
+- The answer can be produced without interpreting or “fixing” the user’s query.
+
 - Answer ALWAYS in Spanish.
 - Use ONLY information explicitly stated in the context. NEVER infer or assume.
 - Do NOT make up information under ANY circumstance.
@@ -68,18 +93,25 @@ Answer the user question based on the provided context and conversation history.
 - ALWAYS prioritize the context.
 - Do NOT include Wikipedia inline references such as [1], [2], [43], etc.
 - Do NOT mention that you are using a context, documents or any retrieval system.
+- NEVER mention the context, documents or any retrieval system. Even if the context does not contain enough information to answer.
+- Do NOT mention or refer to the provided context, chat history, or retrieved documents. Answer naturally as if you already knew the information.
 - Do NOT repeat the question in your answer.
+- Do NOT correct, reinterpret, or modify the user's question.
+- Do NOT replace or substitute entities mentioned by the user, even if they look incorrect or similar to known bands or artists.
+- Do NOT merge information from different entities or documents unless explicitly stated.
+- NEVER mention context, documents, retrieval system, or prompt structure.
+- If the exact entity in the question does not appear in the context, you must not attempt to resolve it using similar names.
 - Be concise and direct.
 - If the context source is a Wikipedia URL, cite it at the end using EXACTLY this format:
   Fuente: [Article title](article_url)
 - If the context source is a web search result, do NOT add any citation.
-</rules>
+- If the answer introduces any entity, album, date, or fact not explicitly present in the context, respond with fallback, no extra text.
+- If the context does not contain enough information to answer the question, respond with fallback, no extra text.
 
-<fallback>
-If the context does NOT contain enough information to answer, respond EXACTLY with:
+Fallback:
+If ANY rule above is violated or context is insufficient, respond EXACTLY:
 "Lo siento, no tengo información suficiente para responder."
-Do NOT add anything else.
-</fallback>
+</rules>
 
 <examples>
 <example>
@@ -138,10 +170,25 @@ Check whether EVERY claim in the answer is explicitly supported by the provided 
 </task>
 
 <rules>
-- An answer is grounded ONLY if every claim can be traced back to the documents.
-- If the answer contains ANY information not present in the documents, return "no".
+- An answer is grounded ONLY if every claim can be directly verified in the documents.
+- You MUST NOT allow inferred, implied, or reconstructed knowledge.
+
+- Return "no" if ANY of the following occurs:
+  - The answer introduces a named entity (band, artist, album, song, person) not explicitly present in the documents.
+  - The answer introduces any album, song, or date not explicitly present in the documents.
+  - The answer connects two entities (e.g., "album belongs to band", "song is from album") unless that relationship is explicitly stated in the documents.
+  - The answer uses general knowledge to fill gaps not explicitly stated in the documents.
+  - The answer sounds plausible but cannot be directly matched to sentences in the documents.
+
+- Return "yes" ONLY if:
+  - Every named entity in the answer appears explicitly in the documents.
+  - Every fact in the answer is explicitly stated in the documents.
+  - No new relationships are introduced beyond what is explicitly written.
+
 - The fallback answer "Lo siento, no tengo información suficiente para responder." is ALWAYS considered grounded. Return "yes".
-- Ignore formatting, citations and style. Focus ONLY on factual grounding.
+
+- Ignore formatting, style, and paraphrasing. Focus only on factual grounding.
+
 - Return ONLY JSON. No explanations. No extra text.
 - Return a JSON with a single key "grounded" and a string value "yes" or "no".
 - Return "yes" if the answer is grounded, "no" if it contains ANY unsupported information.
@@ -271,6 +318,98 @@ Classify a question as "vectorstore" or "off_topic" based in it's relation with 
 
 <input>
 <question>{question}</question>
+</input>
+
+Answer:
+"""
+
+WEB_RESULTS_GRADER_PROMPT = """
+<role>
+You are a strict domain grader for a Spanish rock music assistant.
+Your job is to decide if a web search result is within the domain of Spanish rock music.
+</role>
+
+<task>
+Decide if the document is explicitly and unambiguously about Spanish rock music.
+</task>
+
+<rules>
+Return "yes" ONLY if ALL conditions are met:
+- The document explicitly states that the main subject is Spanish rock music OR a Spanish rock genre context in Spain.
+- The main subject is explicitly identified as:
+  - a Spanish rock band, OR
+  - a Spanish rock artist, OR
+  - a Spanish rock album, OR
+  - a Spanish rock song, OR
+  - a Spanish rock concert or festival.
+- The rock genre MUST be explicitly stated in the document (e.g., "rock", "rock español", "hard rock", "indie rock" within Spain context).
+- The geographic context MUST be Spain when relevant to artists or bands.
+
+Return "no" if ANY of the following is true:
+- The genre is NOT explicitly stated as rock (or rock subgenre).
+- The document is about music in general without explicit genre classification.
+- The document is about rap, hip-hop, trap, reggaeton, pop, electronic, urban, or any non-rock genre.
+- The document is a Spotify/YouTube/Apple Music page that only shows an artist, track, or album without explicit genre metadata stating "rock".
+- The document infers genre indirectly from platform presence, popularity, playlists, or recommendations.
+- The document is about a Spanish artist but genre is missing or ambiguous.
+- The document is a biography, social media post, or profile without explicit "rock" classification.
+- The document is about NON-SPANISH artists or bands.
+
+- NEVER infer genre from:
+  - artist name
+  - platform type (Spotify, YouTube, etc.)
+  - popularity or followers
+  - presence of songs or albums
+  - playlists or algorithmic recommendations
+- ONLY use explicit textual evidence from the document.
+
+- If there is ANY doubt or missing explicit genre confirmation return "no".
+- Return ONLY JSON. No explanations. No extra text.
+- Return a JSON with a single key "in_domain" and a string value "yes" or "no".
+</rules>
+
+<examples>
+
+<example>
+<context>
+Title: History of Spain
+Content: Article about Spanish history, politics and cultural events.
+Source: https://example.com/history
+</context>
+<result>{{"in_domain": "no"}}</result>
+</example>
+
+<example>
+<context>
+Title: International rock festival
+Content: A festival featuring bands from the United States, United Kingdom and Germany.
+Source: https://example.com/festival
+</context>
+<result>{{"in_domain": "no"}}</result>
+</example>
+
+<example>
+<context>
+Title: Music biography
+Content: A Spanish pop band formed in Spain. The article describes the band's members, albums and career.
+Source: https://example.com/band
+</context>
+<result>{{"in_domain": "no"}}</result>
+</example>
+
+<example>
+<context>
+Title: Music biography
+Content: A Spanish rock band formed in Spain. The article describes the band's members, albums and career.
+Source: https://example.com/band
+</context>
+<result>{{"in_domain": "yes"}}</result>
+</example>
+
+</examples>
+
+<input>
+<context>{document}</context>
 </input>
 
 Answer:

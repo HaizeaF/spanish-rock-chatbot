@@ -6,6 +6,7 @@ class GraphState(TypedDict):
     question: str
     generation: str
     is_web_search: bool
+    is_off_topic: bool
     documents: List[str]
     history: List[BaseMessage]
     retries: int
