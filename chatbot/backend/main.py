@@ -3,8 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, AIMessage
 from chatbot.backend.graph.graph import build_graph
+from contextlib import asynccontextmanager
+from chatbot.backend.rag.retriever import get_retriever
 
-app = FastAPI()
+graph = build_graph()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await get_retriever()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,8 +22,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
-
-graph = build_graph()
 
 class MessageRequest(BaseModel):
     question: str
@@ -35,16 +42,18 @@ def _parse_history(history: list[dict]) -> list:
 
 @app.post("/chat", response_model=MessageResponse)
 async def chat(request: MessageRequest):
-    result = graph.invoke({
+    result = await graph.ainvoke({
         "question": request.question,
         "history": _parse_history(request.history),
         "documents": [],
         "generation": "",
+        "formatted_generation": "",
         "is_web_search": False,
+        "is_off_topic": False,
         "retries": 0
     })
 
-    return MessageResponse(answer=result["generation"])
+    return MessageResponse(answer=result["formatted_generation"])
 
 @app.get("/health")
 async def health():

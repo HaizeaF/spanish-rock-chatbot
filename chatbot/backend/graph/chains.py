@@ -1,7 +1,7 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_ollama import ChatOllama
-from chatbot.backend.graph.prompts import (RETRIEVAL_GRADER_PROMPT, ANSWER_PROMPT, HALLUCINATION_GRADER_PROMPT, ANSWER_GRADER_PROMPT, QUESTION_ROUTER_PROMPT, WEB_RESULTS_GRADER_PROMPT)
+from chatbot.backend.graph.prompts import (RETRIEVAL_GRADER_PROMPT, ANSWER_PROMPT, HALLUCINATION_GRADER_PROMPT, ANSWER_GRADER_PROMPT, QUESTION_ROUTER_PROMPT, WEB_RESULTS_GRADER_PROMPT, FORMAT_PROMPT)
 from chatbot.backend.config import LLM_MODEL
 
 _llm_json = ChatOllama(model=LLM_MODEL, format="json", temperature=0)
@@ -41,4 +41,10 @@ web_results_grader = (
     PromptTemplate(template=WEB_RESULTS_GRADER_PROMPT, input_variables=["document"])
     | _llm_json
     | JsonOutputParser()
+)
+
+format_chain = (
+    PromptTemplate(template=FORMAT_PROMPT, input_variables=["raw_answer", "source"])
+    | _llm
+    | StrOutputParser()
 )

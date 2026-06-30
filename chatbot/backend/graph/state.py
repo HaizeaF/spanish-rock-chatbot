@@ -5,6 +5,7 @@ from langchain_core.messages import BaseMessage
 class GraphState(TypedDict):
     question: str
     generation: str
+    formatted_generation: str
     is_web_search: bool
     is_off_topic: bool
     documents: List[str]

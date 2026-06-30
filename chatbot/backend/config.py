@@ -13,6 +13,10 @@ LLM_MODEL = "llama3"
 # Graph
 MAX_RETRIES = 3
 
+# Chunk config
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
+
 # Retriever
 RETRIEVER_K = 6
 
@@ -20,7 +24,7 @@ RETRIEVER_K = 6
 WEB_SEARCH_MAX_RESULTS = 3
 
 # Necessary relevant docs
-MIN_DOCS_FOR_GENERATION = 2
+MIN_DOCS_FOR_GENERATION = 4
 
 # Off-topic response
 OFF_TOPIC_RESPONSE = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."
