@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage
 from langchain_classic.schema import Document
 from langchain_tavily import TavilySearch
 from chatbot.backend.rag.retriever import get_retriever
-from chatbot.backend.graph.chains import retrieval_grader, answer_chain, hallucination_grader, answer_grader, question_router, web_results_grader, format_chain
+from chatbot.backend.graph.chains import retrieval_grader, answer_chain, hallucination_grader, answer_grader, question_router, web_results_grader
 from chatbot.backend.config import MAX_RETRIES, WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, MIN_DOCS_FOR_GENERATION
 
 load_dotenv()
@@ -28,43 +28,68 @@ def _format_context(documents: list) -> str:
         title = doc.metadata.get("title", "")
         chunk = f"Title: {title}\nContent: {doc.page_content}\nSource: {source}"
         chunks.append(chunk)
+
     return "\n\n".join(chunks)
 
 
 async def _validate_relevance(question: str, history: str, doc) -> bool:
-    score = await retrieval_grader.ainvoke({
-        "history": history,
-        "question": question,
-        "document": _format_context([doc])
-    })
-    return score["relevant"] == "yes"
+    try:
+        score = await retrieval_grader.ainvoke({
+            "history": history,
+            "question": question,
+            "document": _format_context([doc])
+        })
+
+        return score.get("relevant") == "yes"
+    except Exception as e:
+        print(f"Relevance grader failed to parse: {e}")
+        return False
 
 
 async def _validate_hallucination(documents: list, generation: str) -> bool:
-    score = await hallucination_grader.ainvoke({
-        "documents": _format_context(documents),
-        "generation": generation
-    })
-    return score["grounded"] == "yes"
+    try:
+        score = await hallucination_grader.ainvoke({
+            "documents": _format_context(documents),
+            "generation": generation
+        })
+
+        return score.get("grounded") == "yes"
+    except Exception as e:
+        print(f"Hallucination grader failed to parse: {e}")
+        return False
 
 
 async def _validate_answer(question: str, generation: str) -> bool:
-    score = await answer_grader.ainvoke({
-        "question": question,
-        "generation": generation
-    })
-    return score["useful"] == "yes"
+    try:
+        score = await answer_grader.ainvoke({
+            "question": question,
+            "generation": generation
+        })
+
+        return score.get("useful") == "yes"
+    except Exception as e:
+        print(f"Answer grader failed to parse: {e}")
+        return False
 
 async def _validate_domain(doc) -> bool:
-    result = await web_results_grader.ainvoke({"document": _format_context([doc])})
-    return result["in_domain"] == "yes"
+    try:
+        result = await web_results_grader.ainvoke({"document": _format_context([doc])})
+
+        return result.get("in_domain") == "yes"
+    except Exception as e:
+        print(f"Domain grader failed to parse: {e}")
+        return False
 
 async def route_question(state):
     print("Routing question")
-    result = await question_router.ainvoke({"question": state["question"]})
-    route = result["route"]
+    try:
+        result = await question_router.ainvoke({"question": state["question"]})
+        route = result.get("route", "off_topic")
+    except Exception as e:
+        print(f"Router failed to parse: {e}")
+        route = "off_topic"
     print(f"Route: {route}")
-    
+
     return route
 
 async def retrieve(state):
@@ -129,21 +154,6 @@ async def generate(state):
     })
 
     return {"documents": state["documents"], "question": state["question"], "generation": generation, "retries": state.get("retries", 0) + 1}
-
-async def format_response(state):
-    print("Formatting response")
-    source = ""
-    for doc in state["documents"]:
-        source = doc.metadata.get("source", "")
-        if source:
-            break
-
-    formatted = await format_chain.ainvoke({
-        "raw_answer": state["generation"],
-        "source": source
-    })
-
-    return {**state, "formatted_generation": formatted}
 
 def generate_off_topic(state):
     print("Off-topic")

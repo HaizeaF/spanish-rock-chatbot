@@ -47,13 +47,12 @@ async def chat(request: MessageRequest):
         "history": _parse_history(request.history),
         "documents": [],
         "generation": "",
-        "formatted_generation": "",
         "is_web_search": False,
         "is_off_topic": False,
         "retries": 0
     })
 
-    return MessageResponse(answer=result["formatted_generation"])
+    return MessageResponse(answer=result["generation"])
 
 @app.get("/health")
 async def health():
