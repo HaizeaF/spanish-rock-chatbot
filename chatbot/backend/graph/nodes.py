@@ -1,25 +1,25 @@
 import asyncio
+from unittest import result
+from chatbot.backend.graph.state import GraphState
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_classic.schema import Document
 from langchain_tavily import TavilySearch
 from chatbot.backend.rag.retriever import get_retriever
-from chatbot.backend.graph.chains import retrieval_grader, answer_chain, hallucination_grader, answer_grader, question_router, web_results_grader
-from chatbot.backend.config import MAX_RETRIES, WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, MIN_DOCS_FOR_GENERATION
+from chatbot.backend.graph.chains import answer_chain, hallucination_grader, question_router, web_results_grader, relevance_grader
+from chatbot.backend.config import WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, FALLBACK_RESPONSE
 
 load_dotenv()
 
 retriever = None
 web_search_tool = TavilySearch(max_results=WEB_SEARCH_MAX_RESULTS)
 
+# Formatting functions
 def _format_history(history: list) -> str:
     if not history:
         return "No previous conversation."
-    return "\n".join(
-        f"{'Usuario' if isinstance(msg, HumanMessage) else 'Asistente'}: {msg.content}"
-        for msg in history
-    )
-
+    
+    return "\n".join(f"{'Usuario' if isinstance(msg, HumanMessage) else 'Asistente'}: {msg.content}" for msg in history)
 
 def _format_context(documents: list) -> str:
     chunks = []
@@ -31,171 +31,121 @@ def _format_context(documents: list) -> str:
 
     return "\n\n".join(chunks)
 
-
-async def _validate_relevance(question: str, history: str, doc) -> bool:
-    try:
-        score = await retrieval_grader.ainvoke({
-            "history": history,
-            "question": question,
-            "document": _format_context([doc])
-        })
-
-        return score.get("relevant") == "yes"
-    except Exception as e:
-        print(f"Relevance grader failed to parse: {e}")
-        return False
-
-
+# Validation functions
 async def _validate_hallucination(documents: list, generation: str) -> bool:
     try:
-        score = await hallucination_grader.ainvoke({
-            "documents": _format_context(documents),
-            "generation": generation
-        })
+        score = await hallucination_grader.ainvoke({"documents": _format_context(documents), "generation": generation})
 
+        print(f"Hallucination grader raw result: {score}")
         return score.get("grounded") == "yes"
     except Exception as e:
         print(f"Hallucination grader failed to parse: {e}")
         return False
 
-
-async def _validate_answer(question: str, generation: str) -> bool:
-    try:
-        score = await answer_grader.ainvoke({
-            "question": question,
-            "generation": generation
-        })
-
-        return score.get("useful") == "yes"
-    except Exception as e:
-        print(f"Answer grader failed to parse: {e}")
-        return False
-
-async def _validate_domain(doc) -> bool:
+async def _validate_web_results(doc) -> bool:
     try:
         result = await web_results_grader.ainvoke({"document": _format_context([doc])})
 
+        print(f"Web results grader raw result: {result}")
         return result.get("in_domain") == "yes"
     except Exception as e:
         print(f"Domain grader failed to parse: {e}")
         return False
-
-async def route_question(state):
-    print("Routing question")
+    
+async def _validate_relevance(history: list, question: str, documents: list) -> bool:
     try:
-        result = await question_router.ainvoke({"question": state["question"]})
-        route = result.get("route", "off_topic")
+        result = await relevance_grader.ainvoke({"history": _format_history(history), "question": question, "documents": _format_context(documents)})
+
+        print(f"Relevance grader raw result: {result}")
+        return result.get("relevant") == "yes"
     except Exception as e:
-        print(f"Router failed to parse: {e}")
-        route = "off_topic"
-    print(f"Route: {route}")
+        print(f"Relevance grader failed to parse: {e}")
+        return False
 
-    return route
-
-async def retrieve(state):
+# Node functions
+async def retrieve(state: GraphState) -> dict:
     print("Retrieving data")
     vector_retriever = await get_retriever()
     documents = await vector_retriever.ainvoke(state["question"])
 
-    return {"documents": documents, "question": state["question"]}
+    for doc in documents:
+        print(f"{doc.page_content[:500]}...")
 
-async def grade_documents(state):
-    print("Grading documents")
-    question = state["question"]
-    history = _format_history(state.get("history", []))
-    filtered_docs = []
-    needs_web_search = False
-    
-    results = await asyncio.gather(
-        *[_validate_relevance(question, history, doc) for doc in state["documents"]]
-    )
-    filtered_docs = [doc for doc, ok in zip(state["documents"], results) if ok]
+    print(f"Retrieved {len(documents)} documents")
 
-    needs_web_search = len(filtered_docs) < MIN_DOCS_FOR_GENERATION
-
-    return {"documents": filtered_docs, "question": question, "is_web_search": needs_web_search}
-
+    return {"documents": documents}
 
 async def web_search(state):
     print("Web search")
     result = await web_search_tool.ainvoke({"query": state["question"]})
-    web_docs = [
-        Document(
-            page_content=res["content"],
-            metadata={"source": "web_search", "title": res.get("title", ""), "url": res.get("url", "")}
-        )
-        for res in result["results"]
-    ]
+    web_docs = [Document(page_content=res["content"],metadata={"source": "web_search", "title": res.get("title", "")}) for res in result.get("results", [])]
 
-    documents = state["documents"] or []
-    documents.extend(web_docs)
+    print(f"Web search returned {len(web_docs)} results")
 
-    return {"documents": documents, "question": state["question"]}
+    return {"documents": web_docs}
 
+async def generate(state: GraphState) -> dict:
+    print("Generating answer")
+    generation = await answer_chain.ainvoke({"context": _format_context(state["documents"]), "question": state["question"], "history": _format_history(state.get("history", []))})
 
-async def grade_web_results(state):
-    print("Grading web results")
+    print(f"Generated answer: {generation}")
+    return {"generation": generation}
+
+def generate_off_topic(state: GraphState) -> dict:
+    print("Off-topic")
+    return {"generation": OFF_TOPIC_RESPONSE}
+
+def generate_fallback(state: GraphState) -> dict:
+    print("Hallucinated answer, providing fallback")
+    return {"generation": FALLBACK_RESPONSE}
+
+# Route functions
+async def route_question(state: GraphState) -> str:
+    print("Routing question")
+    try:
+        result = await question_router.ainvoke({"history": _format_history(state.get("history", [])), "question": state["question"]})
+
+        print(f"Router raw result: {result}")
+        route = result.get("route", "off_topic")
+    except Exception as e:
+        print(f"Router failed to parse: {e}")
+        route = "off_topic"
+        
+    print(f"Route: {route}")
+
+    return route
+
+async def route_relevance(state: GraphState) -> str:
+    print("Routing relevance")
+    if not state["documents"]:
+        print("No documents retrieved, going to web search")
+        return "not_relevant"
+
+    is_relevant = await _validate_relevance(state.get("history", []), state["question"], state["documents"])
+    print(f"Relevant: {is_relevant}")
+
+    return "relevant" if is_relevant else "not_relevant"
+
+async def route_web_results(state: GraphState) -> str:
+    print("Routing web results")
     
     web_docs = [doc for doc in state["documents"] if doc.metadata.get("source") == "web_search"]
-    results = await asyncio.gather(*[_validate_domain(doc) for doc in web_docs])
+    results = await asyncio.gather(*[_validate_web_results(doc) for doc in web_docs])
     topic_docs = [doc for doc, ok in zip(web_docs, results) if ok]
 
     is_off_topic = len(topic_docs) == 0
-    print(f"Web results in domain: {not is_off_topic}")
-
-    return {**state, "is_off_topic": is_off_topic}
-
-async def generate(state):
-    print("Generating answer")
-    generation = await answer_chain.ainvoke({
-        "context": _format_context(state["documents"]),
-        "question": state["question"],
-        "history": _format_history(state.get("history", []))
-    })
-
-    return {"documents": state["documents"], "question": state["question"], "generation": generation, "retries": state.get("retries", 0) + 1}
-
-def generate_off_topic(state):
-    print("Off-topic")
-
-    return {"generation": OFF_TOPIC_RESPONSE, "question": state["question"], "documents": []}
-
-
-def route_method(state):
-    print("Deciding to generate")
-    if state["is_web_search"]:
-        print("Decision: web search")
-        return "websearch"
-    
-    print("Decision: generate")
-    return "generate"
-
-def route_web_results(state):
-    print("Routing web results")
-    if state["is_off_topic"]:
-        print("Decision: off topic")
+    if is_off_topic:
+        print("All web results are off-topic")
         return "off_topic"
     
-    print("Decision: generate")
+    print(f"{len(topic_docs)} web results are on-topic")
+
     return "generate"
 
-async def route_generation(state):
-    print("Grading generation")
-    retries = state.get("retries", 0)
+async def route_hallucination(state: GraphState) -> str:
+    print("Routing hallucination")
+    is_grounded = await _validate_hallucination(state["documents"], state["generation"])
 
-    if retries >= MAX_RETRIES:
-        print(f"Max retries ({MAX_RETRIES}) reached, forcing end")
-        return "useful"
+    print(f"Grounded: {is_grounded}")
 
-    if not await _validate_hallucination(state["documents"], state["generation"]):
-        print("Not grounded")
-        if retries == 1:
-            return "not_supported"
-        return "not_useful"
-
-    if await _validate_answer(state["question"], state["generation"]):
-        print("Useful")
-        return "useful"
-
-    print("Not useful")
-    return "not_useful"
+    return "grounded" if is_grounded else "not_grounded"

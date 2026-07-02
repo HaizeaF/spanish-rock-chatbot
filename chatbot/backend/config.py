@@ -5,39 +5,40 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Paths
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = str(BASE_DIR / "rag" / "data" / "spanish_rock.db")
-INGEST_STATE_PATH = BASE_DIR / "rag" / "data" / "ingested_urls.json"
+BASE_DIR: Path = Path(__file__).resolve().parent
+DB_PATH: str = str(BASE_DIR / "rag" / "data" / "spanish_rock.db")
+INGEST_STATE_PATH: Path = BASE_DIR / "rag" / "data" / "ingested_urls.json"
 
 # Milvus
-COLLECTION_NAME = "spanish_rock"
+COLLECTION_NAME: str = "spanish_rock"
 
 # LLM
-LLM_MODEL = "llama3"
+LLM_MODEL: str = "llama3"
 
 # Graph
-MAX_RETRIES = 3
+MAX_RETRIES: int = 3
 
 # Chunk config
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 100
+CHUNK_SIZE: int = 500
+CHUNK_OVERLAP: int = 50
 
 # Retriever
-RETRIEVER_K = 12
+RETRIEVER_K: int = 4
+
+# Embedding model
+EMBEDDING_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 # Web search
-WEB_SEARCH_MAX_RESULTS = 3
+WEB_SEARCH_MAX_RESULTS: int = 3
 
-# Necessary relevant docs
-MIN_DOCS_FOR_GENERATION = 4
-
-# Off-topic response
-OFF_TOPIC_RESPONSE = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."
+# Defined responses
+FALLBACK_RESPONSE: str = "Lo siento, no tengo informacion suficiente para responder."
+OFF_TOPIC_RESPONSE: str = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."
 
 # Wikipedia
-WIKI_ROOT_CATEGORY = "Categoría:Grupos_de_rock_de_España"
-WIKI_MAX_CATEGORY_DEPTH = 5
-WIKI_USER_AGENT = os.getenv("WIKI_USER_AGENT")
+WIKI_ROOT_CATEGORIES: list[str] = ["Categoría:Grupos_de_rock_de_España", "Categoría:Músicos_de_rock_de_España"]
+WIKI_MAX_CATEGORY_DEPTH: int = 5
+WIKI_USER_AGENT: str = os.getenv("WIKI_USER_AGENT")
 
 if not WIKI_USER_AGENT:
     raise RuntimeError("WIKI_USER_AGENT not defined in .env.")

@@ -1,50 +1,98 @@
-RETRIEVAL_GRADER_PROMPT = """
+QUESTION_ROUTER_PROMPT = """
+<role>
+You are a question router for a Spanish rock music chatbot.
+Your job is to decide if a question is within the scope of the chatbot or not.
+</role>
+
+<task>
+Classify a question as "vectorstore" or "off_topic" based in it's relation with Spanish rock music.
+</task>
+
+<rules>
+- Be FLEXIBLE. A question does NOT need to explicitly mention "rock" or "Spain" to be related.
+- Questions about Spanish bands, Spanish artists, albums, concerts, lyrics or Spanish music history are "vectorstore".
+- Questions about NON-SPANISH bands or artists are "off_topic". This chatbot covers ONLY Spanish rock.
+- Questions about sports, politics, science, cooking or ANY non-music topic are "off_topic".
+- Return ONLY JSON. No explanations. No extra text.
+- Return a JSON with a single key "route" and a string value "vectorstore" or "off_topic".
+- If the question COULD be about a Spanish band or artist, even if the name seems unusual, classify as "vectorstore".
+</rules>
+
+<examples>
+<example>
+<question>¿Cuántos océanos hay en la Tierra?</question>
+<result>{{"route": "off_topic"}}</result>
+</example>
+<example>
+<question>¿Quién fue Napoleón Bonaparte?</question>
+<result>{{"route": "off_topic"}}</result>
+</example>
+<example>
+<question>¿En qué año se formó esa banda?</question>
+<result>{{"route": "vectorstore"}}</result>
+</example>
+<example>
+<question>¿Quién es el cantante de ese grupo?</question>
+<result>{{"route": "vectorstore"}}</result>
+</example>
+</examples>
+
+<input>
+<history>{history}</history>
+<question>{question}</question>
+</input>
+
+Answer:
+"""
+
+RELEVANCE_GRADER_PROMPT = """
 <role>
 You are a relevance grader for a Spanish rock music assistant.
 </role>
 
 <task>
-Evaluate whether the document contains information useful to answer the question.
+Decide if the retrieved documents contain enough information to answer the question returning a JSON with a single key "relevant" and value "yes" or "no".
 </task>
 
 <rules>
-Return "no" if:
-- The document is completely unrelated to Spanish rock music.
-- The document has no meaningful semantic relation to the entity or topic.
-- The document only has vague or indirect thematic similarity.
-
+Answer exclusively "yes" or "no" based on the following criteria:
 Return "yes" if:
-- The document mentions the same band, artist, song, album OR clearly refers to it in a non-ambiguous way.
-- The document contains information that could help answer the question even if wording differs.
+- The documents contain the entity or a well-known name variation of the entity.
+- The documents contain enough factual information to answer the question.
+- The answer can be produced without external knowledge.
 
-IMPORTANT:
-- Do NOT require exact string match of the entity name.
-- Nicknames, partial matches and semantic references are valid.
-- Do NOT infer beyond the document, but allow semantic equivalence.
+Return "no" if:
+- The documents are clearly about another entity.
+- The documents contain no useful information related to the question.
 
+Important:
 - Return ONLY JSON. No explanations. No extra text.
-- Return a JSON with a single key "relevant" and a string value "yes" or "no".
-- Return "yes" if the document is relevant, "no" if it is not.
+- Return a JSON with a single key "relevant" and value "yes" or "no".
+- The key is ALWAYS "relevant" and the value is ALWAYS "yes" or "no".
 </rules>
 
 <examples>
 <example>
 <history>No previous conversation.</history>
-<context>
+<documents>
+<document>
 Title: Italia
 Content: Su capital y ciudad más poblada es Roma.
 Source: https://es.wikipedia.org/wiki/Italia
-</context>
+</document>
+</documents>
 <question>¿Cuál es la capital de Italia?</question>
 <answer>{{"relevant": "yes"}}</answer>
 </example>
 <example>
 <history>Usuario: ¿Qué son los mamíferos? Asistente: Son una clase de animales vertebrados amniotas.</history>
-<context>
+<documents>
+<document>
 Title: Mammalia
 Content: Los mamíferos son una clase de animales vertebrados amniotas.
 Source: https://es.wikipedia.org/wiki/Mammalia
-</context>
+</document>
+</documents>
 <question>¿Quién ganó la final de la Champions League de 2024?</question>
 <answer>{{"relevant": "no"}}</answer>
 </example>
@@ -52,8 +100,100 @@ Source: https://es.wikipedia.org/wiki/Mammalia
 
 <input>
 <history>{history}</history>
-<context>{document}</context>
 <question>{question}</question>
+<documents>{documents}</documents>
+</input>
+
+Answer:
+"""
+
+WEB_RESULTS_GRADER_PROMPT = """
+<role>
+You are a strict domain grader for a Spanish rock music assistant.
+Your job is to decide if a web search result is within the domain of Spanish rock music.
+</role>
+
+<task>
+Decide if the document is explicitly and unambiguously about Spanish rock music.
+</task>
+
+<rules>
+Return "yes" if:
+- The document explicitly states that the main subject is Spanish rock music OR a Spanish rock genre context in Spain.
+- The main subject is explicitly identified as:
+  - a Spanish rock band, OR
+  - a Spanish rock artist, OR
+  - a Spanish rock album, OR
+  - a Spanish rock song, OR
+  - a Spanish rock concert or festival.
+- The rock genre MUST be explicitly stated in the document.
+- The geographic context MUST be Spain when relevant to artists or bands.
+
+Return "no" if ANY of the following is true:
+- The genre is NOT explicitly stated as rock (or rock subgenre).
+- The document is about music in general without explicit genre classification.
+- The document is about rap, hip-hop, trap, reggaeton, pop, electronic, urban, or any non-rock genre.
+- The document is a Spotify/YouTube/Apple Music page that only shows an artist, track, or album without explicit genre metadata stating "rock".
+- The document infers genre indirectly from platform presence, popularity, playlists, or recommendations.
+- The document is about a Spanish artist but genre is missing or ambiguous.
+- The document is a biography, social media post, or profile without explicit "rock" classification.
+- The document is about NON-SPANISH artists or bands.
+
+- NEVER infer genre from:
+  - artist name
+  - platform type (Spotify, YouTube, etc.)
+  - popularity or followers
+  - presence of songs or albums
+  - playlists or algorithmic recommendations
+- ONLY use explicit textual evidence from the document.
+
+- If there is ANY doubt or missing explicit genre confirmation return "no".
+- Return ONLY JSON. No explanations. No extra text.
+- Return a JSON with a single key "in_domain" and a string value "yes" or "no".
+</rules>
+
+<examples>
+
+<example>
+<context>
+Title: History of Spain
+Content: Article about Spanish history, politics and cultural events.
+Source: https://example.com/history
+</context>
+<result>{{"in_domain": "no"}}</result>
+</example>
+
+<example>
+<context>
+Title: International rock festival
+Content: A festival featuring bands from the United States, United Kingdom and Germany.
+Source: https://example.com/festival
+</context>
+<result>{{"in_domain": "no"}}</result>
+</example>
+
+<example>
+<context>
+Title: Music biography
+Content: A Spanish pop band formed in Spain. The article describes the band's members, albums and career.
+Source: https://example.com/band
+</context>
+<result>{{"in_domain": "no"}}</result>
+</example>
+
+<example>
+<context>
+Title: Music biography
+Content: A Spanish rock band formed in Spain. The article describes the band's members, albums and career.
+Source: https://example.com/band
+</context>
+<result>{{"in_domain": "yes"}}</result>
+</example>
+
+</examples>
+
+<input>
+<context>{document}</context>
 </input>
 
 Answer:
@@ -71,17 +211,12 @@ Answer the user question based on the provided context and conversation history.
 
 <rules>
 Answer with fallback (JUST the fallback, no extra text) if ANY of the following occurs:
-- The exact entity in the question does NOT appear in the context.
 - The question contains a band, artist, album or song name that is NOT explicitly present in the context.
-- The answer would require correcting, normalizing, or interpreting the entity name in the question.
-- The answer would require substituting the queried entity with a similar or known entity.
 - The context does not explicitly contain enough information about the exact entity asked.
 
-Answer normally if ALL of the following occurs:
-- The exact entity in the question appears explicitly in the context.
+Answer normally if:
 - All facts used in the answer are explicitly stated in the context.
-- No entity substitution, correction, or normalization is performed.
-- The answer can be produced without interpreting or “fixing” the user’s query.
+- The entity appears using stage names, real names, common aliases or alternative names, as long as they are explicitly present in the context.
 
 - Answer ALWAYS in Spanish.
 - Use ONLY information explicitly stated in the context. NEVER infer or assume.
@@ -91,12 +226,10 @@ Answer normally if ALL of the following occurs:
 - Do NOT include Wikipedia inline references such as [1], [2], [43], etc.
 - Do NOT mention that you are using a context, documents or any retrieval system.
 - NEVER mention the context, documents or any retrieval system. Even if the context does not contain enough information to answer.
-- Do NOT mention or refer to the provided context, chat history, or retrieved documents. Answer naturally as if you already knew the information.
+- Answer naturally as if you already knew the information.
 - Do NOT repeat the question in your answer.
-- Do NOT correct, reinterpret, or modify the user's question.
 - Do NOT replace or substitute entities mentioned by the user, even if they look incorrect or similar to known bands or artists.
 - Do NOT merge information from different entities or documents unless explicitly stated.
-- NEVER mention context, documents, retrieval system, or prompt structure.
 - If the exact entity in the question does not appear in the context, you must not attempt to resolve it using similar names.
 - Be concise and direct.
 - If the context source is a Wikipedia URL, cite it at the end using EXACTLY this format:
@@ -170,10 +303,10 @@ Return "no" if:
 - The answer introduces new facts not supported by the documents.
 - The answer adds new entities (bands, albums, songs, people) not present in the documents.
 - The answer invents relationships not stated in the documents.
+- The answer states a relationship that is NOT explicitly stated in the documents.
 
 Return "yes" if:
 - All facts in the answer are supported by the documents.
-- The answer only rephrases or summarizes the documents.
 - No new entities or facts are introduced.
 
 IMPORTANT:
@@ -186,202 +319,47 @@ IMPORTANT:
 
 - Return ONLY JSON. No explanations. No extra text.
 - Return a JSON with a single key "grounded" and a string value "yes" or "no".
-- Return "yes" if the answer is grounded, "no" if it contains ANY unsupported information.
 </rules>
+
+<examples>
+<example>
+<documents>
+<document>
+Title: Everest
+Content: El monte Everest está en la cordillera del Himalaya y tiene 8.849 metros de altura.
+Source: https://es.wikipedia.org/wiki/Everest
+</document>
+</documents>
+<answer>El Everest se encuentra en el Himalaya y su altura es de 8.849 metros.</answer>
+<result>{{"grounded": "yes"}}</result>
+</example>
+<example>
+<documents>
+<document>
+Title: Everest
+Content: El monte Everest está en la cordillera del Himalaya y tiene 8.849 metros de altura.
+Source: https://es.wikipedia.org/wiki/Everest
+</document>
+</documents>
+<answer>El Everest está en el Himalaya y fue escalado por primera vez en 1953.</answer>
+<result>{{"grounded": "no"}}</result>
+</example>
+<example>
+<documents>
+<document>
+Title: Geografía de Europa
+Content: Francia limita al norte con Bélgica y al sur con España.
+Source: https://es.wikipedia.org/wiki/Geograf%C3%ADa_de_Europa
+</document>
+</documents>
+<answer>Lo siento, no tengo información suficiente para responder.</answer>
+<result>{{"grounded": "yes"}}</result>
+</example>
+</examples>
 
 <input>
 <documents>{documents}</documents>
 <answer>{generation}</answer>
-</input>
-
-Answer:
-"""
-
-ANSWER_GRADER_PROMPT = """
-<role>
-You are an answer quality grader for a Spanish rock music assistant.
-</role>
-
-<task>
-Evaluate whether the answer is useful and addresses the question.
-</task>
-
-<rules>
-- A correct answer MUST return "yes" if:
-  - It answers the question fully or partially in a useful way.
-  - It honestly states lack of information.
-
-- Return "no" ONLY if:
-  - The answer is completely unrelated to the question.
-  - The answer does not attempt to address the question at all.
-
-IMPORTANT:
-- Fallback answer is ALWAYS valid and useful.
-
-- Return ONLY JSON. No explanations. No extra text.
-- Return a JSON with a single key "useful" and a string value "yes" or "no".
-- Return "yes" if the answer resolves the question or honestly states it has no information.
-- Return "no" if the answer is off-topic or does not address the question at all.
-</rules>
-
-<examples>
-<example>
-<question>¿Cuál es la capital de Alemania?</question>
-<answer>La capital de Alemania es Berlín.</answer>
-<result>{{"useful": "yes"}}</result>
-</example>
-<example>
-<question>¿Cuántos habitantes tiene Tokyo?</question>
-<answer>Lo siento, no tengo información suficiente para responder.</answer>
-<result>{{"useful": "yes"}}</result>
-</example>
-<example>
-<question>¿Qué exporta Brasil?</question>
-<answer>La selección brasileña de fútbol es muy famosa.</answer>
-<result>{{"useful": "no"}}</result>
-</example>
-</examples>
-
-<input>
-<question>{question}</question>
-<answer>{generation}</answer>
-</input>
-
-Answer:
-"""
-
-QUESTION_ROUTER_PROMPT = """
-<role>
-You are a question router for a Spanish rock music chatbot.
-Your job is to decide if a question is within the scope of the chatbot or not.
-</role>
-
-<task>
-Classify a question as "vectorstore" or "off_topic" based in it's relation with Spanish rock music.
-</task>
-
-<rules>
-- Be FLEXIBLE. A question does NOT need to explicitly mention "rock" or "Spain" to be related.
-- Questions about Spanish bands, Spanish artists, albums, concerts, lyrics or Spanish music history are "vectorstore".
-- Questions about NON-SPANISH bands or artists are "off_topic". This chatbot covers ONLY Spanish rock.
-- Questions about sports, politics, science, cooking or ANY non-music topic are "off_topic".
-- Return ONLY JSON. No explanations. No extra text.
-- Return a JSON with a single key "route" and a string value "vectorstore" or "off_topic".
-</rules>
-
-<examples>
-<example>
-<question>¿Cuántos océanos hay en la Tierra?</question>
-<result>{{"route": "off_topic"}}</result>
-</example>
-<example>
-<question>¿Quién fue Napoleón Bonaparte?</question>
-<result>{{"route": "off_topic"}}</result>
-</example>
-<example>
-<question>¿En qué año se formó esa banda?</question>
-<result>{{"route": "vectorstore"}}</result>
-</example>
-<example>
-<question>¿Quién es el cantante de ese grupo?</question>
-<result>{{"route": "vectorstore"}}</result>
-</example>
-</examples>
-
-<input>
-<question>{question}</question>
-</input>
-
-Answer:
-"""
-
-WEB_RESULTS_GRADER_PROMPT = """
-<role>
-You are a strict domain grader for a Spanish rock music assistant.
-Your job is to decide if a web search result is within the domain of Spanish rock music.
-</role>
-
-<task>
-Decide if the document is explicitly and unambiguously about Spanish rock music.
-</task>
-
-<rules>
-Return "yes" ONLY if ALL conditions are met:
-- The document explicitly states that the main subject is Spanish rock music OR a Spanish rock genre context in Spain.
-- The main subject is explicitly identified as:
-  - a Spanish rock band, OR
-  - a Spanish rock artist, OR
-  - a Spanish rock album, OR
-  - a Spanish rock song, OR
-  - a Spanish rock concert or festival.
-- The rock genre MUST be explicitly stated in the document (e.g., "rock", "rock español", "hard rock", "indie rock" within Spain context).
-- The geographic context MUST be Spain when relevant to artists or bands.
-
-Return "no" if ANY of the following is true:
-- The genre is NOT explicitly stated as rock (or rock subgenre).
-- The document is about music in general without explicit genre classification.
-- The document is about rap, hip-hop, trap, reggaeton, pop, electronic, urban, or any non-rock genre.
-- The document is a Spotify/YouTube/Apple Music page that only shows an artist, track, or album without explicit genre metadata stating "rock".
-- The document infers genre indirectly from platform presence, popularity, playlists, or recommendations.
-- The document is about a Spanish artist but genre is missing or ambiguous.
-- The document is a biography, social media post, or profile without explicit "rock" classification.
-- The document is about NON-SPANISH artists or bands.
-
-- NEVER infer genre from:
-  - artist name
-  - platform type (Spotify, YouTube, etc.)
-  - popularity or followers
-  - presence of songs or albums
-  - playlists or algorithmic recommendations
-- ONLY use explicit textual evidence from the document.
-
-- If there is ANY doubt or missing explicit genre confirmation return "no".
-- Return ONLY JSON. No explanations. No extra text.
-- Return a JSON with a single key "in_domain" and a string value "yes" or "no".
-</rules>
-
-<examples>
-
-<example>
-<context>
-Title: History of Spain
-Content: Article about Spanish history, politics and cultural events.
-Source: https://example.com/history
-</context>
-<result>{{"in_domain": "no"}}</result>
-</example>
-
-<example>
-<context>
-Title: International rock festival
-Content: A festival featuring bands from the United States, United Kingdom and Germany.
-Source: https://example.com/festival
-</context>
-<result>{{"in_domain": "no"}}</result>
-</example>
-
-<example>
-<context>
-Title: Music biography
-Content: A Spanish pop band formed in Spain. The article describes the band's members, albums and career.
-Source: https://example.com/band
-</context>
-<result>{{"in_domain": "no"}}</result>
-</example>
-
-<example>
-<context>
-Title: Music biography
-Content: A Spanish rock band formed in Spain. The article describes the band's members, albums and career.
-Source: https://example.com/band
-</context>
-<result>{{"in_domain": "yes"}}</result>
-</example>
-
-</examples>
-
-<input>
-<context>{document}</context>
 </input>
 
 Answer:
