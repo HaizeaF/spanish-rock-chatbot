@@ -1,37 +1,48 @@
+import asyncio
 import os
 import shutil
-import asyncio
 from dotenv import load_dotenv
 load_dotenv()
-from langchain_community.document_loaders import WebBaseLoader
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_milvus import Milvus
+from langchain_chroma import Chroma
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from chatbot.backend.config import DB_PATH, COLLECTION_NAME, WIKIPEDIA_URLS, CHUNK_OVERLAP, CHUNK_SIZE
+from chatbot.backend.config import CHROMA_PATH, EMBEDDING_MODEL_NAME, CHUNK_OVERLAP, CHUNK_SIZE
+from chatbot.backend.rag.wikipedia import get_article_documents_in_category_tree
 
-async def _milvus_ingest(chunks):
-    await Milvus.afrom_documents(
-        documents=chunks,
-        collection_name=COLLECTION_NAME,
-        embedding=HuggingFaceEmbeddings(),
-        connection_args={"uri": DB_PATH}
-    )
+def _split_text(documents: list[Document]) -> list[Document]:
+    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
 
-async def ingest():
-    if os.path.exists(DB_PATH):
-        shutil.rmtree(DB_PATH)
+    chunks = text_splitter.split_documents(documents)
+    enriched_chunks = []
 
-    docs_list = []
-    for url in WIKIPEDIA_URLS:
-        docs_list.extend(WebBaseLoader(url).load())
+    for chunk in chunks:
+        title = chunk.metadata["title"]
 
-    splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP
-    )
-    chunks = splitter.split_documents(docs_list)
-    await _milvus_ingest(chunks)
-    print(f"Ingested {len(chunks)} chunks into {DB_PATH}")
+        enriched_chunks.append(
+            Document(
+                page_content=f"Título: {title}\n\n{chunk.page_content}",
+                metadata=chunk.metadata,
+            )
+        )
+
+    print(f"Splitted into {len(enriched_chunks)} chunks.")
+
+    return enriched_chunks
+
+async def ingest() -> None:
+    if os.path.exists(CHROMA_PATH):
+        shutil.rmtree(CHROMA_PATH)
+
+    print("Fetching article documents from Wikipedia")
+    documents = await get_article_documents_in_category_tree()
+
+    chunks = _split_text(documents)
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+    
+    await Chroma.afrom_documents(chunks, embeddings, persist_directory=CHROMA_PATH)
+
+    print(f"Saved {len(chunks)} chunks to {CHROMA_PATH}.")
 
 if __name__ == "__main__":
     asyncio.run(ingest())

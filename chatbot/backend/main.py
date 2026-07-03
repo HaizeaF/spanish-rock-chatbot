@@ -41,20 +41,16 @@ def _parse_history(history: list[dict]) -> list:
     return messages
 
 @app.post("/chat", response_model=MessageResponse)
-async def chat(request: MessageRequest):
+async def chat(request: MessageRequest) -> MessageResponse:
     result = await graph.ainvoke({
         "question": request.question,
         "history": _parse_history(request.history),
         "documents": [],
         "generation": "",
-        "formatted_generation": "",
-        "is_web_search": False,
-        "is_off_topic": False,
-        "retries": 0
     })
 
-    return MessageResponse(answer=result["formatted_generation"])
+    return MessageResponse(answer=result["generation"])
 
 @app.get("/health")
-async def health():
+async def health() -> dict:
     return {"status": "ok"}

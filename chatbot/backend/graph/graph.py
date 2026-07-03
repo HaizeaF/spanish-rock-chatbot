@@ -1,53 +1,55 @@
 from langgraph.graph import END, StateGraph
 from chatbot.backend.graph.state import GraphState
-from chatbot.backend.graph.nodes import (route_question, retrieve, grade_documents, web_search, generate, generate_off_topic, route_method, route_generation, grade_web_results, route_web_results, format_response)
+from chatbot.backend.graph.nodes import (retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_relevance, route_web_results, route_hallucination, rewrite_query)
 
-def build_graph():
+def build_graph() -> StateGraph:
     graph = StateGraph(GraphState)
 
+    graph.add_node("rewrite_query", rewrite_query)
     graph.add_node("retrieve", retrieve)
-    graph.add_node("grade_documents", grade_documents)
     graph.add_node("web_search", web_search)
-    graph.add_node("grade_web_results", grade_web_results)
     graph.add_node("generate", generate)
     graph.add_node("generate_off_topic", generate_off_topic)
-    graph.add_node("format_response", format_response)
+    graph.add_node("generate_fallback", generate_fallback)
 
     graph.set_conditional_entry_point(
         route_question,
         {
-            "vectorstore": "retrieve",
+            "vectorstore": "rewrite_query",
             "off_topic": "generate_off_topic"
         }
     )
-    graph.add_edge("retrieve", "grade_documents")
+
+    graph.add_edge("rewrite_query", "retrieve")
+    
     graph.add_conditional_edges(
-        "grade_documents",
-        route_method,
+        "retrieve",
+        route_relevance,
         {
-            "websearch": "web_search",
-            "generate": "generate"
+            "relevant": "generate",
+            "not_relevant": "web_search"
         }
     )
-    graph.add_edge("web_search", "grade_web_results")
+
     graph.add_conditional_edges(
-        "grade_web_results",
+        "web_search",
         route_web_results,
         {
-            "off_topic": "generate_off_topic",
-            "generate": "generate"
+            "generate": "generate",
+            "off_topic": "generate_off_topic"
         }
     )
-    graph.add_edge("generate_off_topic", "format_response")
+
     graph.add_conditional_edges(
         "generate",
-        route_generation,
+        route_hallucination,
         {
-            "not_supported": "generate",
-            "useful": "format_response",
-            "not_useful": "web_search"
+            "grounded": END,
+            "not_grounded": "generate_fallback"
         }
     )
-    graph.add_edge("format_response", END)
+
+    graph.add_edge("generate_off_topic", END)
+    graph.add_edge("generate_fallback", END)
 
     return graph.compile()

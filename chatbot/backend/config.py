@@ -1,37 +1,45 @@
+import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Paths
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = str(BASE_DIR / "rag" / "data" / "spanish_rock.db")
-
-# Milvus
-COLLECTION_NAME = "spanish_rock"
+BASE_DIR: Path = Path(__file__).resolve().parent
+CHROMA_PATH: str = str(BASE_DIR / "rag" / "data" / "chroma")
 
 # LLM
-LLM_MODEL = "llama3"
+LLM_MODEL: str = "llama3"
 
 # Graph
-MAX_RETRIES = 3
+MAX_RETRIES: int = 3
 
 # Chunk config
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+CHUNK_SIZE: int = 800
+CHUNK_OVERLAP: int = 80
 
 # Retriever
-RETRIEVER_K = 6
+RETRIEVER_K: int = 30
+
+# Embedding model
+EMBEDDING_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+# Reranker
+SIMILARITY_WEIGHT: float = 0.5
+RERANKER_MODEL_NAME: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+RERANKER_TOP_N: int = 4
 
 # Web search
-WEB_SEARCH_MAX_RESULTS = 3
+WEB_SEARCH_MAX_RESULTS: int = 3
 
-# Necessary relevant docs
-MIN_DOCS_FOR_GENERATION = 4
+# Defined responses
+FALLBACK_RESPONSE: str = "Lo siento, no tengo informacion suficiente para responder."
+OFF_TOPIC_RESPONSE: str = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."
 
-# Off-topic response
-OFF_TOPIC_RESPONSE = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."
+# Wikipedia
+WIKI_ROOT_CATEGORIES: list[str] = ["Categoría:Grupos_de_rock_de_España", "Categoría:Músicos_de_rock_de_España"]
+WIKI_MAX_CATEGORY_DEPTH: int = 5
+WIKI_USER_AGENT: str = os.getenv("WIKI_USER_AGENT")
 
-# TODO: Change to Wikipedia API
-WIKIPEDIA_URLS = [
-    "https://es.wikipedia.org/wiki/H%C3%A9roes_del_Silencio",
-    "https://es.wikipedia.org/wiki/Fito_%26_Fitipaldis",
-    "https://es.wikipedia.org/wiki/Extremoduro"
-]
+if not WIKI_USER_AGENT:
+    raise RuntimeError("WIKI_USER_AGENT not defined in .env.")
