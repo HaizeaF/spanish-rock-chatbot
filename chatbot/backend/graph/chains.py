@@ -1,7 +1,7 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_ollama import ChatOllama
-from chatbot.backend.graph.prompts import (ANSWER_PROMPT, HALLUCINATION_GRADER_PROMPT, QUESTION_ROUTER_PROMPT, RELEVANCE_GRADER_PROMPT, WEB_RESULTS_GRADER_PROMPT)
+from chatbot.backend.graph.prompts import (ANSWER_PROMPT, HALLUCINATION_GRADER_PROMPT, QUESTION_ROUTER_PROMPT, QUERY_KEYWORDS_PROMPT, RELEVANCE_GRADER_PROMPT, WEB_RESULTS_GRADER_PROMPT)
 from chatbot.backend.config import LLM_MODEL
 
 _llm_json = ChatOllama(model=LLM_MODEL, format="json", temperature=0)
@@ -9,6 +9,12 @@ _llm = ChatOllama(model=LLM_MODEL, temperature=0.2)
 
 question_router = (
     PromptTemplate(template=QUESTION_ROUTER_PROMPT, input_variables=["history", "question"])
+    | _llm_json
+    | JsonOutputParser()
+)
+
+query_rewriter = (
+    PromptTemplate(template=QUERY_KEYWORDS_PROMPT, input_variables=["history", "question"])
     | _llm_json
     | JsonOutputParser()
 )

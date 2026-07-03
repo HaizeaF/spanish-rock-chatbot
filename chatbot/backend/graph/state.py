@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 
 class GraphState(TypedDict):
     question: str
+    keywords: str
     generation: str
     documents: List[Document]
     history: List[BaseMessage]

@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage
 from langchain_classic.schema import Document
 from langchain_tavily import TavilySearch
 from chatbot.backend.rag.retriever import get_retriever
-from chatbot.backend.graph.chains import answer_chain, hallucination_grader, question_router, web_results_grader, relevance_grader
+from chatbot.backend.graph.chains import answer_chain, hallucination_grader, question_router, web_results_grader, relevance_grader, query_rewriter 
 from chatbot.backend.config import WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, FALLBACK_RESPONSE
 
 load_dotenv()
@@ -34,10 +34,10 @@ def _format_context(documents: list) -> str:
 # Validation functions
 async def _validate_hallucination(documents: list, generation: str) -> bool:
     try:
-        score = await hallucination_grader.ainvoke({"documents": _format_context(documents), "generation": generation})
+        result = await hallucination_grader.ainvoke({"documents": _format_context(documents), "generation": generation})
 
-        print(f"Hallucination grader raw result: {score}")
-        return score.get("grounded") == "yes"
+        print(f"Hallucination grader raw result: {result}")
+        return result.get("grounded") == "yes"
     except Exception as e:
         print(f"Hallucination grader failed to parse: {e}")
         return False
@@ -63,13 +63,22 @@ async def _validate_relevance(history: list, question: str, documents: list) -> 
         return False
 
 # Node functions
+async def rewrite_query(state: GraphState) -> dict:
+    print("Rewriting query")
+    try:
+        result = await query_rewriter.ainvoke({"history": _format_history(state.get("history", [])), "question": state["question"]})
+        print (f"Query rewriter raw result: {result}")
+        rewritten =result.get("rewritten_question", state["question"])
+    except Exception as e:
+        print(f"Query rewriter failed to parse: {e}")
+        rewritten = state["question"]
+
+    return {"keywords": rewritten}
+
 async def retrieve(state: GraphState) -> dict:
     print("Retrieving data")
     vector_retriever = await get_retriever()
-    documents = await vector_retriever.ainvoke(state["question"])
-
-    for doc in documents:
-        print(f"{doc.page_content[:500]}...")
+    documents = await vector_retriever.ainvoke(state["keywords"])
 
     print(f"Retrieved {len(documents)} documents")
 

@@ -1,10 +1,11 @@
 from langgraph.graph import END, StateGraph
 from chatbot.backend.graph.state import GraphState
-from chatbot.backend.graph.nodes import (retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_relevance, route_web_results, route_hallucination)
+from chatbot.backend.graph.nodes import (retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_relevance, route_web_results, route_hallucination, rewrite_query)
 
 def build_graph() -> StateGraph:
     graph = StateGraph(GraphState)
 
+    graph.add_node("rewrite_query", rewrite_query)
     graph.add_node("retrieve", retrieve)
     graph.add_node("web_search", web_search)
     graph.add_node("generate", generate)
@@ -14,11 +15,13 @@ def build_graph() -> StateGraph:
     graph.set_conditional_entry_point(
         route_question,
         {
-            "vectorstore": "retrieve",
+            "vectorstore": "rewrite_query",
             "off_topic": "generate_off_topic"
         }
     )
 
+    graph.add_edge("rewrite_query", "retrieve")
+    
     graph.add_conditional_edges(
         "retrieve",
         route_relevance,

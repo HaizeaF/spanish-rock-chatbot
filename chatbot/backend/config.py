@@ -6,11 +6,7 @@ load_dotenv()
 
 # Paths
 BASE_DIR: Path = Path(__file__).resolve().parent
-DB_PATH: str = str(BASE_DIR / "rag" / "data" / "spanish_rock.db")
-INGEST_STATE_PATH: Path = BASE_DIR / "rag" / "data" / "ingested_urls.json"
-
-# Milvus
-COLLECTION_NAME: str = "spanish_rock"
+CHROMA_PATH: str = str(BASE_DIR / "rag" / "data" / "chroma")
 
 # LLM
 LLM_MODEL: str = "llama3"
@@ -19,14 +15,19 @@ LLM_MODEL: str = "llama3"
 MAX_RETRIES: int = 3
 
 # Chunk config
-CHUNK_SIZE: int = 500
-CHUNK_OVERLAP: int = 50
+CHUNK_SIZE: int = 800
+CHUNK_OVERLAP: int = 80
 
 # Retriever
-RETRIEVER_K: int = 4
+RETRIEVER_K: int = 30
 
 # Embedding model
 EMBEDDING_MODEL_NAME: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+# Reranker
+SIMILARITY_WEIGHT: float = 0.5
+RERANKER_MODEL_NAME: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+RERANKER_TOP_N: int = 4
 
 # Web search
 WEB_SEARCH_MAX_RESULTS: int = 3
