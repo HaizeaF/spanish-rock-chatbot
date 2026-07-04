@@ -13,6 +13,8 @@ Classify a question as "vectorstore" or "off_topic" based in it's relation with 
 - Questions about Spanish bands, Spanish artists, albums, concerts, lyrics or Spanish music history are "vectorstore".
 - Questions about NON-SPANISH bands or artists are "off_topic". This chatbot covers ONLY Spanish rock.
 - Questions about sports, politics, science, cooking or ANY non-music topic are "off_topic".
+- If the question explicitly names a band or artist, classify based ONLY on that name, regardless of what the history discusses.
+- Use history ONLY to resolve pronouns or vague references.
 - Return ONLY JSON. No explanations. No extra text.
 - Return a JSON with a single key "route" and a string value "vectorstore" or "off_topic".
 - If the question COULD be about a Spanish band or artist, even if the name seems unusual, classify as "vectorstore".
@@ -56,18 +58,19 @@ Return a JSON object with a single key "query". The value must be a search query
 
 <rules>
 - Keep the keywords in Spanish.
-- Preserve every band, artist, album, song, place, company or person name EXACTLY as written by the user.
+- Preserve the band, artist, album, song, place, company or person name EXACTLY as written by the user.
 - Use the conversation history to resolve pronouns.
-- The entity must be the main subject of the question. If there is no clear entity, return null.
-- Include the entity as the first keyword whenever it exists.
-- Generate between 4 and 8 keywords.
-- Generate at least 4 keywords.
-- Add synonyms to the keywords:
-  - "Miembros" synonyms: Componentes, integrantes
-  - "Grupo" synonyms: Banda
-  - "Cantante" synonyms: Voz, vocalísta
-  - "Guitarra" synonyms: Guitarrísta
-  - etc.
+- ALWAYS prioritize the question.
+- If the question has nothing to do with the history, DO NOT extract any information from the history
+- If there is no relation between the question and the history, ignore the chat history.
+- Extract the main entity from the LAST question whenever is possible. The history is secondary.
+- Using the history is the last resource.
+- Use the history ONLY to complete the question if it's not possible to understand it.
+- Generate between 6 and 8 keywords.
+- Generate AT LEAST 6 keywords.
+- 3 keywords it's not enough. Generate synonyms if it's necessary to reach 6 keywords.
+- Add synonyms to the keywords.
+- Include keywords that reflect what is being asked.
 - Expand the query with terms likely to appear in Wikipedia.
 - Prefer nouns and noun phrases.
 - Do NOT answer the question.
@@ -79,27 +82,8 @@ Return a JSON object with a single key "query". The value must be a search query
 <examples>
 <example>
 <history>
-Usuario: Qué es Rescalm?.
-Asistente:Un restaurante de comida rápida.
-</history>
-<question>¿Quién lleva la cocina de ese restaurante?</question>
-<answer>
-{{"query": "Rescalm cocinero chef cocina"}}
-</answer>
-</example>
-
-<example>
-<history>No previous conversation.</history>
-<question>¿Cuándo abrió el Museo del Prado?</question>
-<answer>
-{{"query": "Museo del Prado inauguración apertura historia"}}
-</answer>
-</example>
-
-<example>
-<history>
-Usuario: Háblame del Monte Everest.
-Asistente: El Monte Everest es la montaña más alta sobre el nivel del mar.
+User: Háblame del Monte Everest.
+Agent: El Monte Everest es la montaña más alta sobre el nivel del mar.
 </history>
 <question>¿Y quién consiguió subir primero?</question>
 <answer>
@@ -109,12 +93,30 @@ Asistente: El Monte Everest es la montaña más alta sobre el nivel del mar.
 
 <example>
 <history>
-Usuario: Cuéntame sobre Apple.
-Asistente: Apple es una empresa tecnológica estadounidense.
+User: Quién es Marie Curie?
+Agent: Marie Curie fue una física y química polaca-francesa pionera en el estudio de la radiactividad.
+</history>
+<question>¿Cuándo se inauguró la Torre Eiffel?</question>
+<answer>{{"query": "Torre Eiffel inauguración construcción historia fecha apertura"}}</answer>
+</example>
+
+<example>
+<history>
+User: ¿Quién es Marie Curie?
+Agent: Marie Curie fue una física y química polaca-francesa, pionera en el estudio de la radiactividad.
+</history>
+<question>¿Cuándo se fundó el instituto que lleva su nombre?</question>
+<answer>{{"query": "Instituto Curie fundación creación fecha año historia"}}</answer>
+</example>
+
+<example>
+<history>
+User: Cuéntame sobre Apple.
+Agent: Apple es una empresa tecnológica estadounidense.
 </history>
 <question>¿Quién la lleva?</question>
 <answer>
-{{"query": "Apple CEO director ejecutivo presidente"}}
+{{"query": "Apple CEO director ejecutivo presidente empresa"}}
 </answer>
 </example>
 </examples>
@@ -137,31 +139,26 @@ You are a relevance grader for a Spanish rock music assistant. Decide if the ret
 </role>
 
 <task>
-Return {{"relevant": "yes"}} or {{"relevant": "no"}} based on the documents relevance.
+Return {{"relevant": "no"}} or {{"relevant": "yes"}} based on the documents relevance.
 </task>
 
 <rules>
-Answer exclusively "yes" or "no" based on the following criteria:
+Evaluate in two sequential steps. Both must pass to return "yes".
+- If the question has nothing to do with the history, DO NOT extract any information from the history.
+- If there is no relation between the question and the history, ignore the chat history.
+- If the documents answer the history but not the current question, return "no".
+
+STEP 1 - Entity check:
 - If the question contains the name of a band, artist, album or song, that name MUST appear exactly in at least one retrieved document.
 - Differences in spelling, wording, missing words, additional words, abbreviations or similar-looking names are NOT acceptable.
 - Never assume that two entities refer to the same thing because they are similar.
-- Never perform typo correction.
-- Never perform fuzzy matching.
-- Never normalize entity names.
-- Never replace the user's entity with a more popular or better-known one.
+- Never perform typo correction, normalization or replacement of the entity name.
+- If STEP 1 fails, return "no" immediately. Do not proceed to STEP 2.
 
-Return "yes" if:
-- The documents contain the entity.
-- The documents contain enough factual information to answer the question.
-- The answer can be produced without external knowledge.
-- No correction or reinterpretation of the entity name is required.
-
-Return "no" if:
-- Answering the question would require changing, correcting, normalizing or replacing any band, artist, album or song name provided by the user.
-- The retrieved documents only match a similar-looking or similar-sounding entity instead of the exact entity mentioned in the question.
-- The documents refer to a different entity, even if it is likely that the user made a typo.
-- The documents are clearly about another entity.
-- The documents contain no useful information related to the question.
+STEP 2 - Answer check (only if STEP 1 passes):
+- The documents must contain the SPECIFIC factual information the question asks for, not just a mention of the entity.
+- The entity appearing in the documents is NOT sufficient by itself. The specific fact requested (date, name, role, place, number, etc.) must be explicitly present.
+- If the documents mention the entity but talk about a different aspect than what was asked, return "no".
 
 Important:
 - Never assume that a similar name refers to the same entity.
@@ -185,8 +182,11 @@ Source: https://es.wikipedia.org/wiki/Italia
 <question>¿Cuál es la capital de Italia?</question>
 <answer>{{"relevant": "yes"}}</answer>
 </example>
+
 <example>
-<history>Usuario: ¿Qué son los mamíferos? Asistente: Son una clase de animales vertebrados amniotas.</history>
+<history>
+User: ¿Qué son los mamíferos? 
+Agent: Son una clase de animales vertebrados amniotas.</history>
 <documents>
 <document>
 Title: Mammalia
@@ -194,7 +194,7 @@ Content: Los mamíferos son una clase de animales vertebrados amniotas.
 Source: https://es.wikipedia.org/wiki/Mammalia
 </document>
 </documents>
-<question>¿Quién ganó la final de la Champions League de 2024?</question>
+<question>Dime 5 tipos de insectios.</question>
 <answer>{{"relevant": "no"}}</answer>
 </example>
 </examples>
@@ -304,7 +304,7 @@ Answer:
 
 ANSWER_PROMPT = """
 <role>
-You are an kind expert assistant specialized EXCLUSIVELY in Spanish rock music.
+You are an expert assistant specialized EXCLUSIVELY in Spanish rock music.
 You are happy to answer questions about Spanish rock bands, artists, albums, concerts and music history.
 </role>
 
@@ -326,11 +326,12 @@ Answer normally if:
 - Do NOT correct, reinterpret, or modify the user's question.
 - Do NOT replace or substitute entities mentioned by the user, even if they look incorrect or similar to known bands or artists.
 - Use the conversation history to understand references and maintain coherence.
-- ALWAYS prioritize the context.
+- ALWAYS prioritize the question.
+- Always answer the CURRENT question specifically, even if the topic is related to previous messages.
+- Use the history only to understand references, never as a source of the answer itself unless it directly and explicitly answers the current question.
+- If the question has nothing to do with the history, DO NOT extract any information from the history
+- If there is no relation between the question and the history, ignore the chat history.
 - ALWAYS return the most complete name explicitly present in the context.
-- Prefer full name (first name and surname) over first name alone.
-- Use only a first name if NO surname appears anywhere in the context.
-- Never shorten a person's name if a longer version exists in the context.
 - Do NOT mention that you are using a context, documents or any retrieval system.
 - NEVER mention the context, documents or any retrieval system. Even if the context does not contain enough information to answer.
 - Answer naturally as if you already knew the information.
@@ -348,20 +349,23 @@ Answer normally if:
 
 Fallback:
 If context is insufficient, respond EXACTLY:
-"Lo siento, no tengo información suficiente para responder."
+"Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera."
 </rules>
 
 <examples>
 <example>
-<history>Usuario: ¿Qué es el sistema solar? Asistente: Es el sistema planetario que liga gravitacionalmente a un conjunto de objetos astronómicos. Fuente: [Sistema solar](https://es.wikipedia.org/wiki/Sistema_solar)</history>
+<history>
+User: ¿Qué es el sistema solar? 
+Agent: Es el sistema planetario que liga gravitacionalmente a un conjunto de objetos astronómicos.</history>
 <context>
 Title: Astronomía
 Content: El Sol es la estrella central del sistema solar.
 Source: https://es.wikipedia.org/wiki/Astronom%C3%ADa
 </context>
 <question>¿Cuántos planetas hay ahí?</question>
-<answer>Lo siento, no tengo información suficiente para responder.</answer>
+<answer>Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera.</answer>
 </example>
+
 <example>
 <history>No previous conversation.</history>
 <context>
@@ -374,15 +378,19 @@ Source: https://es.wikipedia.org/wiki/Gastronom%C3%ADa_espa%C3%B1ola
 La paella es el plato más famoso de Valencia. ¿Quieres saber más sobre la paella?
 </answer>
 </example>
+
 <example>
-<history>No previous conversation.</history>
+<history>
+User: ¿Quién es Marie Curie?
+Agent: Marie Curie fue una física y química polaca-francesa, pionera en el estudio de la radiactividad y primera persona en ganar dos premios Nobel en distintas disciplinas.
+</history>
 <context>
-Title: Paella
-Content: La paella valenciana se cocina con arroz, pollo y verduras.
-Source: https://www.cocina.es/recetas/paella
+Title: Instituto Curie
+Content: El Instituto Curie es un centro de investigación sobre el cáncer fundado en París en 1920 por Marie Curie.
+Source: https://es.wikipedia.org/wiki/Instituto_Curie
 </context>
-<question>¿Cómo se hace la paella?</question>
-<answer>La paella valenciana se elabora con arroz, pollo y verduras.</answer>
+<question>¿Cuándo se fundó el instituto?</question>
+<answer>El Instituto Curie se fundó en 1920.</answer>
 </example>
 </examples>
 
@@ -420,7 +428,7 @@ IMPORTANT:
 - Rewording is allowed.
 - Strict literal matching is NOT required.
 
-- The fallback answer "Lo siento, no tengo información suficiente para responder." is ALWAYS considered grounded. Return "yes".
+- The fallback answer "Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera." is ALWAYS considered grounded. Return "yes".
 - Ignore formatting, style, and paraphrasing. Focus only on factual grounding.
 
 - Return ONLY JSON. No explanations. No extra text.
@@ -446,6 +454,7 @@ Source: https://es.wikipedia.org/wiki/Everest
 <answer>El Everest se encuentra en el Himalaya y su altura es de 8.849 metros.</answer>
 <result>{{"grounded": "yes"}}</result>
 </example>
+
 <example>
 <documents>
 <document>
@@ -457,6 +466,7 @@ Source: https://es.wikipedia.org/wiki/Everest
 <answer>El Everest está en el Himalaya y fue escalado por primera vez en 1953.</answer>
 <result>{{"grounded": "no"}}</result>
 </example>
+
 <example>
 <documents>
 <document>
@@ -465,7 +475,7 @@ Content: Francia limita al norte con Bélgica y al sur con España.
 Source: https://es.wikipedia.org/wiki/Geograf%C3%ADa_de_Europa
 </document>
 </documents>
-<answer>Lo siento, no tengo información suficiente para responder.</answer>
+<answer>Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera.</answer>
 <result>{{"grounded": "yes"}}</result>
 </example>
 </examples>

@@ -33,7 +33,7 @@ RERANKER_TOP_N: int = 4
 WEB_SEARCH_MAX_RESULTS: int = 3
 
 # Defined responses
-FALLBACK_RESPONSE: str = "Lo siento, no tengo informacion suficiente para responder."
+FALLBACK_RESPONSE: str = "Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera."
 OFF_TOPIC_RESPONSE: str = "Lo siento, soy un asistente especializado en rock español. No puedo ayudarte con ese tema."
 
 # Wikipedia

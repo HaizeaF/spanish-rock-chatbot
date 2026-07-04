@@ -5,7 +5,7 @@ from chatbot.backend.graph.prompts import (ANSWER_PROMPT, HALLUCINATION_GRADER_P
 from chatbot.backend.config import LLM_MODEL
 
 _llm_json = ChatOllama(model=LLM_MODEL, format="json", temperature=0)
-_llm = ChatOllama(model=LLM_MODEL, temperature=0.2)
+_llm = ChatOllama(model=LLM_MODEL, temperature=0)
 
 question_router = (
     PromptTemplate(template=QUESTION_ROUTER_PROMPT, input_variables=["history", "question"])

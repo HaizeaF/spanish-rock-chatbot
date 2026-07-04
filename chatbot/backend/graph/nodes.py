@@ -15,11 +15,18 @@ retriever = None
 web_search_tool = TavilySearch(max_results=WEB_SEARCH_MAX_RESULTS)
 
 # Formatting functions
-def _format_history(history: list) -> str:
+def _format_history(history: list, max_msg: int = 2) -> str:
     if not history:
         return "No previous conversation."
     
-    return "\n".join(f"{'Usuario' if isinstance(msg, HumanMessage) else 'Asistente'}: {msg.content}" for msg in history)
+    filtered = [msg for msg in history if msg.content not in (OFF_TOPIC_RESPONSE, FALLBACK_RESPONSE)]
+
+    if not filtered:
+        return "No previous conversation."
+    
+    filtered = filtered[-max_msg * 2:]
+
+    return "\n".join(f"{'User' if isinstance(msg, HumanMessage) else 'Agent'}: {msg.content}"for msg in filtered)
 
 def _format_context(documents: list) -> str:
     chunks = []
@@ -79,6 +86,9 @@ async def retrieve(state: GraphState) -> dict:
     print("Retrieving data")
     vector_retriever = await get_retriever()
     documents = await vector_retriever.ainvoke(state["keywords"])
+
+    for doc in documents:
+        print(doc.page_content)
 
     print(f"Retrieved {len(documents)} documents")
 
