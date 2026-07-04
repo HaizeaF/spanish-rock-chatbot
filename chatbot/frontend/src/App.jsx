@@ -103,12 +103,14 @@ function App() {
 
   return (
     <div className="App">
-      <div className="header">
+    <div className="header">
+      <div className="header-title">
         <h1>Asistente de Rock Español</h1>
         <button type="button" className="clear-button" onClick={handleClearChat} disabled={chatLog.length === 0}>
-          <Trash2 size={18}/>
+          <Trash2 size={20}/>
         </button>
       </div>
+    </div>
 
       <div className="chat-window" ref={chatWindowRef}>
         {chatLog.map((message, index) => (

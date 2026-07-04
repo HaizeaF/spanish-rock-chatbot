@@ -44,9 +44,11 @@ def _parse_history(history: list[dict]) -> list:
 async def chat(request: MessageRequest) -> MessageResponse:
     result = await graph.ainvoke({
         "question": request.question,
+        "standalone_question": "",
         "history": _parse_history(request.history),
         "documents": [],
         "generation": "",
+        "web_searched": False
     })
 
     return MessageResponse(agent_response=result["generation"])

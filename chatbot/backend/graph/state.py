@@ -5,7 +5,9 @@ from langchain_core.documents import Document
 
 class GraphState(TypedDict):
     question: str
+    standalone_question: str
     keywords: str
     generation: str
     documents: List[Document]
     history: List[BaseMessage]
+    web_searched: bool

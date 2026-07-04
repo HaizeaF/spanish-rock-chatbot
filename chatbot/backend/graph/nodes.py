@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage
 from langchain_classic.schema import Document
 from langchain_tavily import TavilySearch
 from chatbot.backend.rag.retriever import get_retriever
-from chatbot.backend.graph.chains import answer_chain, hallucination_grader, question_router, web_results_grader, relevance_grader, query_rewriter 
+from chatbot.backend.graph.chains import answer_chain, hallucination_grader, question_router, web_results_grader, keywords_generator, question_rewriter
 from chatbot.backend.config import WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, FALLBACK_RESPONSE
 
 load_dotenv()
@@ -15,7 +15,7 @@ retriever = None
 web_search_tool = TavilySearch(max_results=WEB_SEARCH_MAX_RESULTS)
 
 # Formatting functions
-def _format_history(history: list, max_msg: int = 2) -> str:
+def _format_history(history: list, max_msg: int = 1) -> str:
     if not history:
         return "No previous conversation."
     
@@ -58,37 +58,40 @@ async def _validate_web_results(doc) -> bool:
     except Exception as e:
         print(f"Domain grader failed to parse: {e}")
         return False
-    
-async def _validate_relevance(history: list, question: str, documents: list) -> bool:
-    try:
-        result = await relevance_grader.ainvoke({"history": _format_history(history), "question": question, "documents": _format_context(documents)})
-
-        print(f"Relevance grader raw result: {result}")
-        return result.get("relevant") == "yes"
-    except Exception as e:
-        print(f"Relevance grader failed to parse: {e}")
-        return False
 
 # Node functions
-async def rewrite_query(state: GraphState) -> dict:
+async def rewrite_question(state: GraphState) -> dict:
+    print("Rewriting question")
+
+    try:
+        result = await question_rewriter.ainvoke({"history": _format_history(state.get("history", [])), "question": state["question"]})
+
+        print(f"Question rewriter raw result: {result}")
+
+        standalone = result.get("question", state["question"])
+
+    except Exception as e:
+        print(f"Question rewriter failed: {e}")
+        standalone = state["question"]
+
+    return {"standalone_question": standalone}
+
+async def generate_keywords(state: GraphState) -> dict:
     print("Rewriting query")
     try:
-        result = await query_rewriter.ainvoke({"history": _format_history(state.get("history", [])), "question": state["question"]})
+        result = await keywords_generator.ainvoke({"question": state["standalone_question"]})
         print (f"Query rewriter raw result: {result}")
-        rewritten =result.get("rewritten_question", state["question"])
+        keywords = result.get("query", state["standalone_question"])
     except Exception as e:
         print(f"Query rewriter failed to parse: {e}")
-        rewritten = state["question"]
+        keywords = state["standalone_question"]
 
-    return {"keywords": rewritten}
+    return {"keywords": keywords}
 
 async def retrieve(state: GraphState) -> dict:
     print("Retrieving data")
     vector_retriever = await get_retriever()
     documents = await vector_retriever.ainvoke(state["keywords"])
-
-    for doc in documents:
-        print(doc.page_content)
 
     print(f"Retrieved {len(documents)} documents")
 
@@ -96,16 +99,16 @@ async def retrieve(state: GraphState) -> dict:
 
 async def web_search(state):
     print("Web search")
-    result = await web_search_tool.ainvoke({"query": state["question"]})
+    result = await web_search_tool.ainvoke({"query": state["standalone_question"]})
     web_docs = [Document(page_content=res["content"],metadata={"source": "web_search", "title": res.get("title", "")}) for res in result.get("results", [])]
 
     print(f"Web search returned {len(web_docs)} results")
 
-    return {"documents": web_docs}
+    return {"documents": web_docs, "web_searched": True}
 
 async def generate(state: GraphState) -> dict:
     print("Generating answer")
-    generation = await answer_chain.ainvoke({"context": _format_context(state["documents"]), "question": state["question"], "history": _format_history(state.get("history", []))})
+    generation = await answer_chain.ainvoke({"context": _format_context(state["documents"]), "question": state["standalone_question"]})
 
     print(f"Generated answer: {generation}")
     return {"generation": generation}
@@ -122,7 +125,7 @@ def generate_fallback(state: GraphState) -> dict:
 async def route_question(state: GraphState) -> str:
     print("Routing question")
     try:
-        result = await question_router.ainvoke({"history": _format_history(state.get("history", [])), "question": state["question"]})
+        result = await question_router.ainvoke({"question": state["standalone_question"]})
 
         print(f"Router raw result: {result}")
         route = result.get("route", "off_topic")
@@ -133,17 +136,6 @@ async def route_question(state: GraphState) -> str:
     print(f"Route: {route}")
 
     return route
-
-async def route_relevance(state: GraphState) -> str:
-    print("Routing relevance")
-    if not state["documents"]:
-        print("No documents retrieved, going to web search")
-        return "not_relevant"
-
-    is_relevant = await _validate_relevance(state.get("history", []), state["question"], state["documents"])
-    print(f"Relevant: {is_relevant}")
-
-    return "relevant" if is_relevant else "not_relevant"
 
 async def route_web_results(state: GraphState) -> str:
     print("Routing web results")
@@ -161,10 +153,15 @@ async def route_web_results(state: GraphState) -> str:
 
     return "generate"
 
-async def route_hallucination(state: GraphState) -> str:
-    print("Routing hallucination")
-    is_grounded = await _validate_hallucination(state["documents"], state["generation"])
+async def route_generation(state):
+    if state["generation"] != FALLBACK_RESPONSE:
+        grounded = await _validate_hallucination(
+            state["documents"],
+            state["generation"],
+        )
+        return "end" if grounded else "generate_fallback"
 
-    print(f"Grounded: {is_grounded}")
+    if state.get("web_searched", False):
+        return "end"
 
-    return "grounded" if is_grounded else "not_grounded"
+    return "web_search"

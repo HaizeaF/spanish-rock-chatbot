@@ -11,9 +11,6 @@ CHROMA_PATH: str = str(BASE_DIR / "rag" / "data" / "chroma")
 # LLM
 LLM_MODEL: str = "llama3"
 
-# Graph
-MAX_RETRIES: int = 3
-
 # Chunk config
 CHUNK_SIZE: int = 800
 CHUNK_OVERLAP: int = 80
