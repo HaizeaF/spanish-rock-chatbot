@@ -1,35 +1,33 @@
 from langgraph.graph import END, StateGraph
 from chatbot.backend.graph.state import GraphState
-from chatbot.backend.graph.nodes import (retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_relevance, route_web_results, route_hallucination, rewrite_query)
+from chatbot.backend.graph.nodes import (retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_web_results, generate_keywords, rewrite_question, route_generation)
 
 def build_graph() -> StateGraph:
     graph = StateGraph(GraphState)
 
-    graph.add_node("rewrite_query", rewrite_query)
+    graph.add_node("rewrite_question", rewrite_question)
+    graph.add_node("generate_keywords", generate_keywords)
     graph.add_node("retrieve", retrieve)
     graph.add_node("web_search", web_search)
     graph.add_node("generate", generate)
     graph.add_node("generate_off_topic", generate_off_topic)
     graph.add_node("generate_fallback", generate_fallback)
 
-    graph.set_conditional_entry_point(
+
+    graph.set_entry_point("rewrite_question")
+
+    graph.add_conditional_edges(
+        "rewrite_question",
         route_question,
         {
-            "vectorstore": "rewrite_query",
+            "vectorstore": "generate_keywords",
             "off_topic": "generate_off_topic"
         }
     )
 
-    graph.add_edge("rewrite_query", "retrieve")
+    graph.add_edge("generate_keywords", "retrieve")
     
-    graph.add_conditional_edges(
-        "retrieve",
-        route_relevance,
-        {
-            "relevant": "generate",
-            "not_relevant": "web_search"
-        }
-    )
+    graph.add_edge("retrieve", "generate")
 
     graph.add_conditional_edges(
         "web_search",
@@ -42,10 +40,11 @@ def build_graph() -> StateGraph:
 
     graph.add_conditional_edges(
         "generate",
-        route_hallucination,
+        route_generation,
         {
-            "grounded": END,
-            "not_grounded": "generate_fallback"
+            "generate_fallback": "generate_fallback",
+            "web_search": "web_search",
+            "end": END
         }
     )
 

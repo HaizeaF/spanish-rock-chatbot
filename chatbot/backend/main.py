@@ -17,7 +17,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -28,7 +28,7 @@ class MessageRequest(BaseModel):
     history: list[dict] = []
 
 class MessageResponse(BaseModel):
-    answer: str
+    agent_response: str
 
 def _parse_history(history: list[dict]) -> list:
     messages = []
@@ -44,12 +44,14 @@ def _parse_history(history: list[dict]) -> list:
 async def chat(request: MessageRequest) -> MessageResponse:
     result = await graph.ainvoke({
         "question": request.question,
+        "standalone_question": "",
         "history": _parse_history(request.history),
         "documents": [],
         "generation": "",
+        "web_searched": False
     })
 
-    return MessageResponse(answer=result["generation"])
+    return MessageResponse(agent_response=result["generation"])
 
 @app.get("/health")
 async def health() -> dict:
