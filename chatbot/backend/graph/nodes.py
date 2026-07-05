@@ -1,34 +1,42 @@
+"""Node and routing functions for the chatbot conversational graph.
+ 
+Each node performs a single responsibility and returns a partial state update, following LangGraph conventions.
+"""
+
 import asyncio
-from unittest import result
-from chatbot.backend.graph.state import GraphState
+from chatbot.backend.schemas.state import GraphState
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_classic.schema import Document
 from langchain_tavily import TavilySearch
 from chatbot.backend.rag.retriever import get_retriever
 from chatbot.backend.graph.chains import answer_chain, hallucination_grader, question_router, web_results_grader, keywords_generator, question_rewriter
-from chatbot.backend.config import WEB_SEARCH_MAX_RESULTS, OFF_TOPIC_RESPONSE, FALLBACK_RESPONSE
+from chatbot.backend.config.config import Config
 
 load_dotenv()
 
-retriever = None
-web_search_tool = TavilySearch(max_results=WEB_SEARCH_MAX_RESULTS)
+_web_search_tool = TavilySearch(max_results=Config.WEB_SEARCH_MAX_RESULTS)
 
-# Formatting functions
-def _format_history(history: list, max_msg: int = 1) -> str:
+# Formatting helpers
+def _format_history(history: list, max_turns: int = 1) -> str:
+    """Format the last conversation turns into a readable block for prompts.
+ 
+    Off-topic and fallback responses are excluded so they do not pollute the context used to resolve pronouns or references.
+    """
     if not history:
         return "No previous conversation."
     
-    filtered = [msg for msg in history if msg.content not in (OFF_TOPIC_RESPONSE, FALLBACK_RESPONSE)]
+    filtered = [msg for msg in history if msg.content not in (Config.OFF_TOPIC_RESPONSE, Config.FALLBACK_RESPONSE)]
 
     if not filtered:
         return "No previous conversation."
     
-    filtered = filtered[-max_msg * 2:]
+    filtered = filtered[-max_turns * 2:]
 
     return "\n".join(f"{'User' if isinstance(msg, HumanMessage) else 'Agent'}: {msg.content}"for msg in filtered)
 
 def _format_context(documents: list) -> str:
+    """Format a list of documents into a single text block for prompts."""
     chunks = []
     for doc in documents:
         source = doc.metadata.get("source", "")
@@ -38,8 +46,9 @@ def _format_context(documents: list) -> str:
 
     return "\n\n".join(chunks)
 
-# Validation functions
+# Validation helpers
 async def _validate_hallucination(documents: list, generation: str) -> bool:
+    """Check whether a generated answer is grounded in the retrieved documents."""
     try:
         result = await hallucination_grader.ainvoke({"documents": _format_context(documents), "generation": generation})
 
@@ -50,6 +59,7 @@ async def _validate_hallucination(documents: list, generation: str) -> bool:
         return False
 
 async def _validate_web_results(doc) -> bool:
+    """Check whether a single web search result is within the chatbot's domain."""
     try:
         result = await web_results_grader.ainvoke({"document": _format_context([doc])})
 
@@ -61,6 +71,7 @@ async def _validate_web_results(doc) -> bool:
 
 # Node functions
 async def rewrite_question(state: GraphState) -> dict:
+    """Rewrite the user question into a standalone version using conversation history."""
     print("Rewriting question")
 
     try:
@@ -77,6 +88,7 @@ async def rewrite_question(state: GraphState) -> dict:
     return {"standalone_question": standalone}
 
 async def generate_keywords(state: GraphState) -> dict:
+    """Generate a retrieval-optimized keyword query from the standalone question."""
     print("Rewriting query")
     try:
         result = await keywords_generator.ainvoke({"question": state["standalone_question"]})
@@ -89,6 +101,7 @@ async def generate_keywords(state: GraphState) -> dict:
     return {"keywords": keywords}
 
 async def retrieve(state: GraphState) -> dict:
+    """Retrieve candidate documents from the vector store using the generated keywords."""
     print("Retrieving data")
     vector_retriever = await get_retriever()
     documents = await vector_retriever.ainvoke(state["keywords"])
@@ -97,9 +110,10 @@ async def retrieve(state: GraphState) -> dict:
 
     return {"documents": documents}
 
-async def web_search(state):
+async def web_search(state) -> dict:
+    """Fetch live web search results for the standalone question as a fallback source."""
     print("Web search")
-    result = await web_search_tool.ainvoke({"query": state["standalone_question"]})
+    result = await _web_search_tool.ainvoke({"query": state["standalone_question"]})
     web_docs = [Document(page_content=res["content"],metadata={"source": "web_search", "title": res.get("title", "")}) for res in result.get("results", [])]
 
     print(f"Web search returned {len(web_docs)} results")
@@ -107,6 +121,7 @@ async def web_search(state):
     return {"documents": web_docs, "web_searched": True}
 
 async def generate(state: GraphState) -> dict:
+    """Generate an answer grounded in the retrieved documents."""
     print("Generating answer")
     generation = await answer_chain.ainvoke({"context": _format_context(state["documents"]), "question": state["standalone_question"]})
 
@@ -114,15 +129,18 @@ async def generate(state: GraphState) -> dict:
     return {"generation": generation}
 
 def generate_off_topic(state: GraphState) -> dict:
+    """Return the fixed off-topic response."""
     print("Off-topic")
-    return {"generation": OFF_TOPIC_RESPONSE}
+    return {"generation": Config.OFF_TOPIC_RESPONSE}
 
 def generate_fallback(state: GraphState) -> dict:
+    """Return the fixed fallback response when no grounded answer could be produced."""
     print("Hallucinated answer, providing fallback")
-    return {"generation": FALLBACK_RESPONSE}
+    return {"generation": Config.FALLBACK_RESPONSE}
 
 # Route functions
 async def route_question(state: GraphState) -> str:
+    """Route the standalone question to the vector store or the off-topic branch."""
     print("Routing question")
     try:
         result = await question_router.ainvoke({"question": state["standalone_question"]})
@@ -138,6 +156,7 @@ async def route_question(state: GraphState) -> str:
     return route
 
 async def route_web_results(state: GraphState) -> str:
+    """Route to generation only if at least one web result is within the chatbot's domain."""
     print("Routing web results")
     
     web_docs = [doc for doc in state["documents"] if doc.metadata.get("source") == "web_search"]
@@ -153,13 +172,20 @@ async def route_web_results(state: GraphState) -> str:
 
     return "generate"
 
-async def route_generation(state):
-    if state["generation"] != FALLBACK_RESPONSE:
-        grounded = await _validate_hallucination(
-            state["documents"],
-            state["generation"],
-        )
-        return "end" if grounded else "generate_fallback"
+async def route_generation(state: GraphState) -> str:
+    """Decide whether the answer is final, needs a fallback, or needs a web search retry.
+ 
+    Web search is attempted exactly once per turn. If the answer is not grounded and the web has not been searched yet, the graph falls back to web search, otherwise the fixed fallback response is returned to avoid infinite loops.
+    """
+    if state["generation"] != Config.FALLBACK_RESPONSE:
+        grounded = await _validate_hallucination(state["documents"], state["generation"])
+        if grounded:
+            return "end"
+        
+        if state.get("web_searched", False):
+            return "generate_fallback"
+        
+        return "web_search"
 
     if state.get("web_searched", False):
         return "end"

@@ -1,8 +1,8 @@
 # Spanish rock RAG Chatbot
-A conversational assistant specialized in Spanish rock music, built as a multi-agent Retrieval-Augmented Generation (RAG) system. The assistant answers questions using a knowledge base automatically built from Wikipedia, falling back to live web search when the internal knowledge base is insufficient.
+A conversational assistant specialized in Spanish rock music, built as a Retrieval-Augmented Generation (RAG) system with a corrective retrieval loop. The assistant answers questions using a knowledge base automatically built from Wikipedia, falling back to live web search when the internal knowledge base is insufficient. Built with Meta Llama 3.
 
 ## Features
-- **Multi-agent architecture**: The system is composed of specialized LLM agents, each with a single responsiblity, orchestrated as a stateful graph.
+- **Specialized LLM chain architecture**: The system is composed of specialized LLM agents, each with a single responsiblity, orchestrated as a stateful graph.
 - **Retrieval-Augmented Generation (RAG)**: Answers are grounded in a vector store built from Wikipedia articles using Chroma.
 - **Hybrid search**: Dense and sparse (BM25) retrieval are combined through an ensemble retriever, then reranked with a cross-encoder.
 - **Chat history**: A dedicated agent rewrites each question and the chat history into a standalone form before routing or retrieval, resolving pronouns and omitted references.
@@ -12,7 +12,12 @@ A conversational assistant specialized in Spanish rock music, built as a multi-a
 - **Full-stack**: A React frontend consumes the FastAPI backend over a REST endpoint, with persistent chat history, loading states and error handling.
 
 ## Graph
-TODO: Add image
+![Conversational graph](chatbot/backend/graph/graph.png)
+
+The image above is generated with GraphVisualizerService and is not committed automatically. Regenerate it after any change to the graph topology:
+```bash
+python -m chatbot.backend.services.graph_visualizer_service
+```
 
 ## Agents
 | Agent | Responsibility |
@@ -50,29 +55,40 @@ The chat interface is a React application that communicates with the backend thr
 ```
 chatbot/
 ├── backend/
-│   ├── config.py            # Centralized configuration
-│   ├── main.py              # FastAPI entry point
+│   ├── config/
+│   │   └── config.py               # Centralized configuration
 │   ├── graph/
-│   │   ├── state.py          # Shared graph state definition
-│   │   ├── graph.py          # Graph construction and routing
-│   │   ├── nodes.py          # Node and routing function implementations
-│   │   ├── chains.py         # LLM chain definitions
-│   │   └── prompts.py        # Agent prompt templates
-│   └── rag/
-│       ├── wikipedia.py      # Wikipedia category crawler
-│       ├── ingest.py         # Ingestion pipeline (crawl, chunk, embed, index)
-│       └── retriever.py      # Ensemble retriever and reranker setup
+│   │   ├── chains.py               # LLM chain definitions
+│   │   ├── nodes.py                # Node and routing function implementations
+│   │   └── graph_visualizer.py     # Graph PNG export
+│   ├── prompts/
+│   │   ├── prompts.py              # Chain prompt templates
+│   │   └── grader_prompts.py       # Grading prompt templates
+│   ├── rag/
+│   │   ├── ingest.py               # Ingestion pipeline
+│   │   ├── retriever.py            # Ensemble retriever and reranker setup
+│   │   └── wikipedia.py            # Wikipedia category crawler
+│   ├── routes/
+│   │   ├── chat.py                 # Chat endpoint
+│   │   └── health.py               # Health check endpoint
+│   ├── schemas/
+│   │   ├── message.py              # Request/response payloads
+│   │   └── state.py                # Shared graph state definition
+│   ├── services/
+│   │    └── graph_service.py       # Graph construction and routing
+│   └── main.py                     # FastAPI entry point
 frontend/
 └── src/
-    └── App.jsx               # Chat interface
+    └── App.jsx                     # Chat interface
 ```
+
 ## Configuration
- 
 Key parameters, defined in `chatbot/backend/config.py`:
  
 | Variable | Description |
 |---|---|
 | `LLM_MODEL` | Ollama model used for all agents |
+| `WRITER_LLM_MODEL` | Ollama model used for rewriting and answer generation |
 | `CHUNK_SIZE` / `CHUNK_OVERLAP` | Document splitting parameters |
 | `RETRIEVER_K` | Number of candidates retrieved before reranking |
 | `RERANKER_TOP_N` | Number of documents kept after reranking |
@@ -80,13 +96,15 @@ Key parameters, defined in `chatbot/backend/config.py`:
 | `WEB_SEARCH_MAX_RESULTS` | Maximum web search results per query |
 | `WIKI_ROOT_CATEGORIES` | Wikipedia categories used as crawl seeds |
 | `WIKI_MAX_CATEGORY_DEPTH` | Maximum category traversal depth |
+| `GRAPH_IMAGE_PATH` | Default output path for the generated graph image |
+| `CHROMA_PATH` | Default output path for the generated vectorstore |
 
 ## Setup
 
 ### 1. Prerequisites
 - Python 3.11+
 - Node.js 18+
-- [Ollama](https://ollama.com) installed locally, with the target model pulled (e.g. `ollama pull llama3`)
+- [Ollama](https://ollama.com) installed locally, with the target models pulled (e.g. `ollama pull llama3`, `ollama pull qwen3:8b`)
 - A [Tavily](https://tavily.com) API key, for web search fallback
 
 ### 2. Backend
@@ -101,6 +119,7 @@ Create a `.env` file with:
 ```
 WIKI_USER_AGENT=your-app-name (contact@example.com)
 TAVILY_API_KEY=your-tavily-api-key
+HF_TOKEN=your-huggingface-token
 ```
 
 ### 3. Build the knowledge base
@@ -130,6 +149,7 @@ It relies on external content and models with their own licensing terms:
  
 - **Wikipedia content**: Text retrieved and indexed from the Spanish Wikipedia is licensed under [Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0)](https://creativecommons.org/licenses/by-sa/4.0/) and the [GNU Free Documentation License (GFDL)](https://www.gnu.org/licenses/fdl-1.3.html). Content generated by this chatbot from Wikipedia-derived context should retain attribution to Wikipedia and remain shareable under compatible terms if redistributed.
 - **LLM model**: Inference is performed locally through Ollama using Meta's Llama 3, distributed under the [Meta Llama 3 Community License](https://llama.meta.com/llama3/license/). Use of the model is subject to that license's terms and acceptable use policy.
-- **Embedding model**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, licensed under Apache License 2.0.
-- **Reranker model**: `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, licensed under Apache License 2.0.
-- **Web search**: Live search results are retrieved via the Tavily API and are subject to Tavily's terms of service; they are not redistributed or stored beyond the scope of a single conversation.
+- **Writer LLM model**: Question rewriting and answer generation use Alibaba's Qwen3 (`qwen3:8b`) through Ollama, distributed under the [Apache License 2.0](https://ollama.com/library/qwen3:latest/blobs/d18a5cc71b84).
+- **Embedding model**: `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, licensed under [Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/).
+- **Reranker model**: `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1`, licensed under [Apache License 2.0](https://choosealicense.com/licenses/apache-2.0/).
+- **Web search**: Live search results are retrieved via the Tavily API and are subject to [Tavily's terms of service](https://www.tavily.com/terms).
