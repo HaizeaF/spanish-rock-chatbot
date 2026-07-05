@@ -1,8 +1,15 @@
+"""Graph construction for the chatbot.
+ 
+Builds a LangGraph StateGraph that wires together the rewriting, routing, retrieval, generation and grading nodes.
+"""
+
+
 from langgraph.graph import END, StateGraph
 from chatbot.backend.graph.state import GraphState
 from chatbot.backend.graph.nodes import (retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_web_results, generate_keywords, rewrite_question, route_generation)
 
 def build_graph() -> StateGraph:
+    """Build and compile the conversational graph for the chatbot."""
     graph = StateGraph(GraphState)
 
     graph.add_node("rewrite_question", rewrite_question)

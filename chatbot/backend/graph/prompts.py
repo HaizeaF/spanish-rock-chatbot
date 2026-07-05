@@ -48,26 +48,11 @@ Agent: Saturno es el sexto planeta del sistema solar y es conocido por sus anill
 
 <example>
 <history>
-User: Cuéntame sobre la Gran Muralla China.
-Agent: La Gran Muralla China es una antigua fortificación construida para defender el norte de China.
-</history>
-<question>¿Cuánto mide?</question>
-<answer>{{"question":"¿Cuánto mide la Gran Muralla China?"}}</answer>
-</example>
-
-<example>
-<history>
 User: ¿Quién fue Alan Turing?
 Agent: Alan Turing fue un matemático e informático británico considerado uno de los padres de la computación.
 </history>
 <question>¿Cómo se prepara una tortilla de patatas?</question>
 <answer>{{"question":"¿Cómo se prepara una tortilla de patatas?"}}</answer>
-</example>
-
-<example>
-<history>No previous conversation.</history>
-<question>¿Quién pintó Las Meninas?</question>
-<answer>{{"question":"¿Quién pintó Las Meninas?"}}</answer>
 </example>
 
 <example>
@@ -95,7 +80,9 @@ Agent: Marte es el cuarto planeta del sistema solar.
 <question>{question}</question>
 </input>
 
-Remember: Return ONLY valid JSON with this structure:
+Remember: 
+- Check the rules.
+- Return ONLY valid JSON with this structure:
 
 {{"question":"..."}}
 

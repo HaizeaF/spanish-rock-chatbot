@@ -1,3 +1,5 @@
+"""Hybrid retriever setup: dense and sparse retrieval with cross-encoder reranking."""
+
 import asyncio
 from langchain_classic.retrievers import EnsembleRetriever
 from langchain_community.retrievers import BM25Retriever
@@ -13,6 +15,10 @@ _compression_retriever = None
 _lock = asyncio.Lock()
 
 async def get_retriever():
+    """Build and return the retriever used for the vector store branch.
+ 
+    Combines dense similarity search over Chroma with sparse BM25 search through an ensemble retriever, then reranks the combined candidates with a cross-encoder.
+    """
     global _compression_retriever
     async with _lock:
         if _compression_retriever is not None:

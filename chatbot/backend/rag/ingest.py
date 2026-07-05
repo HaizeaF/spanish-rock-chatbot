@@ -1,3 +1,5 @@
+"""Ingestion pipeline: crawl Wikipedia, split into chunks and index them in Chroma."""
+
 import asyncio
 import os
 import shutil
@@ -8,9 +10,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from chatbot.backend.config import CHROMA_PATH, EMBEDDING_MODEL_NAME, CHUNK_OVERLAP, CHUNK_SIZE
-from chatbot.backend.rag.wikipedia import get_article_documents_in_category_tree
+from chatbot.backend.rag.wikipedia import get_article_documents_in_categories
 
 def _split_text(documents: list[Document]) -> list[Document]:
+    """Split articles into overlapping chunks and prepend the article title to each."""
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
 
     chunks = text_splitter.split_documents(documents)
@@ -31,11 +34,12 @@ def _split_text(documents: list[Document]) -> list[Document]:
     return enriched_chunks
 
 async def ingest() -> None:
+    """Rebuild the vector store from scratch using freshly crawled Wikipedia articles."""
     if os.path.exists(CHROMA_PATH):
         shutil.rmtree(CHROMA_PATH)
 
     print("Fetching article documents from Wikipedia")
-    documents = await get_article_documents_in_category_tree()
+    documents = await get_article_documents_in_categories()
 
     chunks = _split_text(documents)
     embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
