@@ -17,7 +17,6 @@ class GraphState(TypedDict):
         history: The prior conversation messages.
         web_searched: Whether a web search has already been attempted this turn.
     """
-
     question: str
     standalone_question: str
     keywords: str

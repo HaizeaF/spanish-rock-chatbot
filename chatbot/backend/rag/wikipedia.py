@@ -2,7 +2,7 @@
 
 import asyncio
 import wikipediaapi
-from chatbot.backend.config import WIKI_USER_AGENT, WIKI_MAX_CATEGORY_DEPTH, WIKI_ROOT_CATEGORIES
+from chatbot.backend.config.config import Config
 from langchain_core.documents import Document
 from dataclasses import dataclass, field
 from urllib.parse import quote
@@ -17,7 +17,7 @@ class CrawlState:
     
 def _get_wiki_client() -> wikipediaapi.AsyncWikipedia:
     """Create an async Spanish Wikipedia API client."""
-    return wikipediaapi.AsyncWikipedia(user_agent=WIKI_USER_AGENT, language="es")
+    return wikipediaapi.AsyncWikipedia(user_agent=Config.WIKI_USER_AGENT, language="es")
 
 def _title_to_url(title: str) -> str:
     """Build the Spanish Wikipedia URL for an article title."""
@@ -63,8 +63,7 @@ async def _walk_category(state: CrawlState, category_title: str, depth: int, loc
 
     await asyncio.gather(*[_walk_category(state, sub, depth + 1, lock) for sub in subcategories])
 
-
-async def get_article_documents_in_categories(root_categories: list[str] = WIKI_ROOT_CATEGORIES,max_depth: int = WIKI_MAX_CATEGORY_DEPTH) -> list[Document]:
+async def get_article_documents_in_categories(root_categories: list[str] = Config.WIKI_ROOT_CATEGORIES, max_depth: int = Config.WIKI_MAX_CATEGORY_DEPTH) -> list[Document]:
     """Crawl the given categories and return all unique articles found as Documents."""
     print(f"Starting crawl from root categories: '{root_categories}' (max depth {max_depth})")
 

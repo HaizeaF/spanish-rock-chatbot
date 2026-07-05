@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Trash2 } from 'lucide-react'
 import './App.css'
 
-const API_URL = 'http://localhost:8000/chat'
+const API_URL = import.meta.env.VITE_API_URL
 const STORAGE_KEY = 'chatLog'
 
 function App() {
+  
   const [userInput, setUserInput] = useState('')
   const [chatLog, setChatLog] = useState([])
   const [loading, setLoading] = useState(false)

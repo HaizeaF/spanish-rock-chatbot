@@ -9,30 +9,21 @@ Return a JSON object with a single key "question". The value must be a standalon
 </task>
 
 <rules>
-- Rewrite the current question ONLY if it depends on the conversation history.
-- Use the history ONLY to resolve pronouns, omitted entities or vague references.
+- Replace all ambiguous references (e.g. "él", "ella", "ello", "ellos", "ellas", "lo", "la", "los", "las", "le", "les", "su", "sus", "suyo", "suya", "suyos", "suyas", "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas", "aquel", "aquella", "aquellos", "aquellas", or omitted subjects) with the corresponding explicit entity mentioned in the conversation history whenever they refer to it.
+- If the current question contains pronouns, possessives, demonstratives or omitted references that depend on the conversation history (e.g. "él", "ella", "lo", "la", "su", "sus", "suyo", "esta", "ese", "aquella", "ellos", etc.), replace every ambiguous reference with the explicit entity from the conversation history so that the rewritten question is fully standalone.
+- Try to substitute the pronouns, possessives, demonstratives or omitted references whenever is possible.
+- This substitution rule ALWAYS takes priority over any instruction to leave entities untouched: a pronoun is NOT an "entity explicitly written by the user", it is a reference that must be resolved.
+- ALWAYS use the history to resolve pronouns, omitted entities or vague references.
+- If the current question ALSO contains an explicit proper name (a band, artist, album or song written out, not a pronoun), keep that name exactly as written and do not touch it.
 - If the current question is already self-contained, return it unchanged.
 - ALWAYS preserve the user's original meaning.
-- Prioritize ALWAYS the question, NEVER the history
 - Do NOT answer the question.
-- Do NOT invent entities or facts.
-- Do NOT replace, correct or normalize names mentioned by the user.
-- If the history is unrelated to the current question, ignore it completely.
 - ALWAYS prioritize the current question.
-- NEVER replace, substitute, correct, normalize or reinterpret any entity explicitly written by the user.
-- An entity includes any band, artist, album, song, person or proper name.
 - If the current question explicitly mentions one or more entities, those entities MUST appear EXACTLY the same in the rewritten question.
-- NEVER use an entity from the conversation history to replace an entity explicitly written by the user.
 - If both the history and the current question contain different entity names, ALWAYS preserve the entity names from the current question.
-- History may ONLY be used to replace ambiguous references such as pronouns .
 - If there are no ambiguous references, return the question unchanged.
-- Only use the previous assistant answer to resolve pronouns or omitted references.
-- NEVER infer that a different entity is intended.
-- NEVER substitute one entity for another even if it seems more coherent with the conversation.
 - Return ONLY JSON. No explanations. No extra text.
 - Return a JSON object with a single key "question" and a string value.
-- NEVER replace, correct, normalize or reinterpret any entity explicitly written by the user.
-- If the last user message explicitly contains a band, artist, album, song or person name, preserve it EXACTLY.
 </rules>
 
 <examples>
@@ -42,7 +33,7 @@ Return a JSON object with a single key "question". The value must be a standalon
 User: Háblame de Saturno.
 Agent: Saturno es el sexto planeta del sistema solar y es conocido por sus anillos.
 </history>
-<question>¿Cuántos tiene?</question>
+<question>¿Cuántos tiene ese?</question>
 <answer>{{"question":"¿Cuántos anillos tiene Saturno?"}}</answer>
 </example>
 
@@ -187,98 +178,6 @@ Remember: Return ONLY valid JSON with this structure:
 Answer:
 """
 
-WEB_RESULTS_GRADER_PROMPT = """
-<role>
-You are a strict domain grader for a Spanish rock music assistant.
-Your job is to decide if a web search result is within the domain of Spanish rock music.
-</role>
-
-<task>
-Decide if the document is explicitly and unambiguously about Spanish rock music.
-</task>
-
-<rules>
-Return "yes" if:
-- The document explicitly states that the main subject is Spanish rock music OR a Spanish rock genre context in Spain.
-- The main subject is explicitly identified as:
-  - a Spanish rock band, OR
-  - a Spanish rock artist, OR
-  - a Spanish rock album, OR
-  - a Spanish rock song, OR
-  - a Spanish rock concert or festival.
-- The rock genre MUST be explicitly stated in the document.
-- The geographic context MUST be Spain when relevant to artists or bands.
-
-Return "no" if ANY of the following is true:
-- The genre is NOT explicitly stated as rock (or rock subgenre).
-- The document is about music in general without explicit genre classification.
-- The document is about rap, hip-hop, trap, reggaeton, pop, electronic, urban, or any non-rock genre.
-- The document is a Spotify/YouTube/Apple Music page that only shows an artist, track, or album without explicit genre metadata stating "rock".
-- The document infers genre indirectly from platform presence, popularity, playlists, or recommendations.
-- The document is about a Spanish artist but genre is missing or ambiguous.
-- The document is a biography, social media post, or profile without explicit "rock" classification.
-- The document is about NON-SPANISH artists or bands.
-
-- NEVER infer genre from:
-  - artist name
-  - platform type (Spotify, YouTube, etc.)
-  - popularity or followers
-  - presence of songs or albums
-  - playlists or algorithmic recommendations
-- ONLY use explicit textual evidence from the document.
-
-- If there is ANY doubt or missing explicit genre confirmation return "no".
-- Return ONLY JSON. No explanations. No extra text.
-- Return a JSON with a single key "in_domain" and a string value "yes" or "no".
-</rules>
-
-<examples>
-
-<example>
-<context>
-Title: History of Spain
-Content: Article about Spanish history, politics and cultural events.
-Source: https://example.com/history
-</context>
-<result>{{"in_domain": "no"}}</result>
-</example>
-
-<example>
-<context>
-Title: International rock festival
-Content: A festival featuring bands from the United States, United Kingdom and Germany.
-Source: https://example.com/festival
-</context>
-<result>{{"in_domain": "no"}}</result>
-</example>
-
-<example>
-<context>
-Title: Music biography
-Content: A Spanish pop band formed in Spain. The article describes the band's members, albums and career.
-Source: https://example.com/band
-</context>
-<result>{{"in_domain": "no"}}</result>
-</example>
-
-<example>
-<context>
-Title: Music biography
-Content: A Spanish rock band formed in Spain. The article describes the band's members, albums and career.
-Source: https://example.com/band
-</context>
-<result>{{"in_domain": "yes"}}</result>
-</example>
-
-</examples>
-
-<input>
-<context>{document}</context>
-</input>
-
-Answer:
-"""
-
 ANSWER_PROMPT = """
 <role>
 You are an expert assistant specialized EXCLUSIVELY in Spanish rock music.
@@ -310,12 +209,9 @@ Answer normally if:
 - Do NOT replace or substitute entities mentioned by the user, even if they look incorrect or similar to known bands or artists.
 - If the context does not contain enough information to answer the question, respond with fallback, no extra text.
 - Write complete, natural-sounding sentences.
-- Answer in a friendly and informative tone.
 - Do not answer with isolated names or lists when a complete sentence is possible.
 - Prefer one or two well-written sentences over extremely short answers.
-- If the question asks "who", answer by identifying the person and their role.
-- If the question asks "what", briefly explain what it is.
-- If the question asks "when", include the event together with the date if available.
+- DO NOT assume relations between entities.
 - Be concise, but not abrupt.
 
 Fallback:
@@ -365,91 +261,3 @@ Source: https://es.wikipedia.org/wiki/Instituto_Curie
 Answer:
 """
 
-HALLUCINATION_GRADER_PROMPT = """
-<role>
-You are a hallucination grader for a Spanish rock music assistant. Check whether the answer introduces information not supported by the documents returning a JSON with a single key "grounded" and value "yes" or "no".
-</role>
-
-<task>
-Determine whether every factual claim in the answer is supported by the provided documents. Return {{"grounded": "yes"}} or {{"grounded": "no"}} after checking whether the answer introduces information not supported by the documents. 
-</task>
-
-<rules>
-Return "no" if:
-- The answer introduces facts that cannot reasonably be concluded from the documents.
-- The answer invents dates, names, events or relationships.
-
-Return "yes" if:
-- Every factual statement is explicitly stated OR is an obvious consequence of combining the documents.
-- The answer may summarize.
-- The answer may paraphrase.
-- The answer may omit details.
-- The answer may combine information from multiple documents.
-
-IMPORTANT:
-- Do NOT require the answer to use the same wording as the documents.
-- Paraphrasing is allowed.
-- Rewording is allowed.
-- Strict literal matching is NOT required.
-
-- The fallback answer "Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera." is ALWAYS considered grounded. Return "yes".
-- Ignore formatting, style, and paraphrasing. Focus only on factual grounding.
-
-- Return ONLY JSON. No explanations. No extra text.
-- Return a JSON with a single key "grounded" and a string value "yes" or "no".
-
-The answer MAY infer simple relationships that are directly implied by the documents.
-
-Examples:
-- Identifying the members of a band from descriptions of those members.
-- Referring to a band's founder as one of its members if the documents explicitly describe both facts.
-- Combining information from different retrieved documents into a single statement.
-</rules>
-
-<examples>
-<example>
-<documents>
-<document>
-Title: Everest
-Content: El monte Everest está en la cordillera del Himalaya y tiene 8.849 metros de altura.
-Source: https://es.wikipedia.org/wiki/Everest
-</document>
-</documents>
-<answer>El Everest se encuentra en el Himalaya y su altura es de 8.849 metros.</answer>
-<result>{{"grounded": "yes"}}</result>
-</example>
-
-<example>
-<documents>
-<document>
-Title: Everest
-Content: El monte Everest está en la cordillera del Himalaya y tiene 8.849 metros de altura.
-Source: https://es.wikipedia.org/wiki/Everest
-</document>
-</documents>
-<answer>El Everest está en el Himalaya y fue escalado por primera vez en 1953.</answer>
-<result>{{"grounded": "no"}}</result>
-</example>
-
-<example>
-<documents>
-<document>
-Title: Geografía de Europa
-Content: Francia limita al norte con Bélgica y al sur con España.
-Source: https://es.wikipedia.org/wiki/Geograf%C3%ADa_de_Europa
-</document>
-</documents>
-<answer>Lo siento, no tengo información suficiente para responder. También puedes intentar formular la pregunta de otra manera.</answer>
-<result>{{"grounded": "yes"}}</result>
-</example>
-</examples>
-
-<input>
-<documents>{documents}</documents>
-<answer>{generation}</answer>
-</input>
-
-Remember: Return a JSON with a single key "grounded" and a string value "yes" or "no".
-
-Answer:
-"""

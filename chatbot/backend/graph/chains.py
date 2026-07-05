@@ -6,12 +6,13 @@ Two different local models are used, chosen for the specific demands of each tas
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser, StrOutputParser
 from langchain_ollama import ChatOllama
-from chatbot.backend.graph.prompts import (QUESTION_REWRITER_PROMPT, ANSWER_PROMPT, HALLUCINATION_GRADER_PROMPT, QUESTION_ROUTER_PROMPT, QUERY_KEYWORDS_PROMPT, WEB_RESULTS_GRADER_PROMPT)
-from chatbot.backend.config import LLM_MODEL, REWRITER_LLM_MODEL
+from chatbot.backend.prompts.prompts import QUESTION_REWRITER_PROMPT, ANSWER_PROMPT, QUESTION_ROUTER_PROMPT, QUERY_KEYWORDS_PROMPT
+from chatbot.backend.prompts.grader_prompts import HALLUCINATION_GRADER_PROMPT, WEB_RESULTS_GRADER_PROMPT
+from chatbot.backend.config.config import Config
 
-_llm_json = ChatOllama(model=LLM_MODEL, format="json", temperature=0)
-_llm_rewriter = ChatOllama(model=REWRITER_LLM_MODEL, format="json", temperature=0)
-_llm = ChatOllama(model=LLM_MODEL, temperature=0)
+_llm_json = ChatOllama(model=Config.LLM_MODEL, format="json", temperature=0)
+_llm_rewriter = ChatOllama(model=Config.WRITER_LLM_MODEL, format="json", temperature=0)
+_llm = ChatOllama(model=Config.WRITER_LLM_MODEL, temperature=0)
 
 question_rewriter = (
     PromptTemplate(template=QUESTION_REWRITER_PROMPT, input_variables=["history", "question"])

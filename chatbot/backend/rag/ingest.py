@@ -9,12 +9,12 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
-from chatbot.backend.config import CHROMA_PATH, EMBEDDING_MODEL_NAME, CHUNK_OVERLAP, CHUNK_SIZE
+from chatbot.backend.config.config import Config
 from chatbot.backend.rag.wikipedia import get_article_documents_in_categories
 
 def _split_text(documents: list[Document]) -> list[Document]:
     """Split articles into overlapping chunks and prepend the article title to each."""
-    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=Config.CHUNK_SIZE, chunk_overlap=Config.CHUNK_OVERLAP)
 
     chunks = text_splitter.split_documents(documents)
     enriched_chunks = []
@@ -35,18 +35,18 @@ def _split_text(documents: list[Document]) -> list[Document]:
 
 async def ingest() -> None:
     """Rebuild the vector store from scratch using freshly crawled Wikipedia articles."""
-    if os.path.exists(CHROMA_PATH):
-        shutil.rmtree(CHROMA_PATH)
+    if os.path.exists(Config.CHROMA_PATH):
+        shutil.rmtree(Config.CHROMA_PATH)
 
     print("Fetching article documents from Wikipedia")
     documents = await get_article_documents_in_categories()
 
     chunks = _split_text(documents)
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+    embeddings = HuggingFaceEmbeddings(model_name=Config.EMBEDDING_MODEL_NAME)
     
-    await Chroma.afrom_documents(chunks, embeddings, persist_directory=CHROMA_PATH)
+    await Chroma.afrom_documents(chunks, embeddings, persist_directory=Config.CHROMA_PATH)
 
-    print(f"Saved {len(chunks)} chunks to {CHROMA_PATH}.")
+    print(f"Saved {len(chunks)} chunks to {Config.CHROMA_PATH}.")
 
 if __name__ == "__main__":
     asyncio.run(ingest())
