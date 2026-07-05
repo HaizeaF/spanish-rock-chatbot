@@ -18,7 +18,7 @@ A conversational assistant specialized in Spanish rock music, built as a Retriev
 
 The image above is generated with GraphVisualizerService and is not committed automatically. Regenerate it after any change to the graph topology:
 ```bash
-python -m chatbot.backend.services.graph_visualizer_service
+python -m chatbot.backend.services.graph_visualizer
 ```
 
 ## Agents
