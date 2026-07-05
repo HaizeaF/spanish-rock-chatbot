@@ -1,5 +1,7 @@
-# Spanish rock RAG Chatbot
+# Spanish Rock RAG Chatbot
 A conversational assistant specialized in Spanish rock music, built as a Retrieval-Augmented Generation (RAG) system with a corrective retrieval loop. The assistant answers questions using a knowledge base automatically built from Wikipedia, falling back to live web search when the internal knowledge base is insufficient. Built with Meta Llama 3.
+
+<img alt="chat_demo" src="https://github.com/user-attachments/assets/1d710199-de39-4aca-93a4-a96a1a9d68eb" />
 
 ## Features
 - **Specialized LLM chain architecture**: The system is composed of specialized LLM agents, each with a single responsiblity, orchestrated as a stateful graph.
