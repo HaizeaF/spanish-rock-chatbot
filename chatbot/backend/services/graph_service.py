@@ -7,7 +7,7 @@ from langgraph.graph import END, StateGraph
 from chatbot.backend.schemas.state import GraphState
 from chatbot.backend.graph.nodes import retrieve, web_search, generate, generate_off_topic, generate_fallback, route_question, route_web_results, generate_keywords, rewrite_question, route_generation
 
-def build_graph() -> StateGraph:
+def build_graph():
     """Build and compile the conversational graph for the chatbot."""
     graph = StateGraph(GraphState)
 

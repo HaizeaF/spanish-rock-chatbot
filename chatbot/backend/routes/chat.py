@@ -24,6 +24,7 @@ async def chat(request: MessageRequest) -> MessageResponse:
     result = await graph.ainvoke({
         "question": request.question,
         "standalone_question": "",
+        "keywords": "",
         "history": _parse_history(request.history),
         "documents": [],
         "generation": "",

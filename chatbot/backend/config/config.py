@@ -42,7 +42,7 @@ class Config:
     # Wikipedia ingestion
     WIKI_ROOT_CATEGORIES: list[str] = ["Categoría:Grupos_de_rock_de_España", "Categoría:Músicos_de_rock_de_España"]
     WIKI_MAX_CATEGORY_DEPTH: int = 5
-    WIKI_USER_AGENT: str = os.getenv("WIKI_USER_AGENT")
+    WIKI_USER_AGENT: str = os.getenv("WIKI_USER_AGENT", "")
 
     if not WIKI_USER_AGENT:
         raise RuntimeError("WIKI_USER_AGENT not defined in .env.")

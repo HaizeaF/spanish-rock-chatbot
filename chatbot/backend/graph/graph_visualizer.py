@@ -19,7 +19,7 @@ class GraphVisualizerService:
         """Store the compiled graph that will be rendered."""
         self.graph = graph
 
-    def save_png(self, output_path: str = None) -> Path:
+    def save_png(self, output_path: str = "") -> Path:
         """Render the graph as a PNG image and save it to disk."""
         path = Path(output_path or Config.GRAPH_IMAGE_PATH)
         path.parent.mkdir(parents=True, exist_ok=True)
